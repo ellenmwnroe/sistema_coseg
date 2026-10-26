@@ -1,11 +1,26 @@
 import os
+import urllib.parse
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# A Vercel define VERCEL=1 nos servidores dela; no computador de vocês não existe.
+NA_VERCEL = bool(os.environ.get("VERCEL"))
+
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "dev-coseg-troque-em-producao")
-DEBUG = os.environ.get("DJANGO_DEBUG", "1") == "1"
-ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
+DEBUG = os.environ.get("DJANGO_DEBUG", "0" if NA_VERCEL else "1") == "1"
+ALLOWED_HOSTS = ["localhost", "127.0.0.1", ".vercel.app"] + [
+    h for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "").split(",") if h
+]
+CSRF_TRUSTED_ORIGINS = ["https://*.vercel.app"] + [
+    f"https://{h.lstrip('.')}" for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "").split(",") if h
+]
+# A Vercel recebe em HTTPS e repassa ao Django; este cabeçalho avisa isso a ele.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+SESSION_COOKIE_SECURE = NA_VERCEL
+CSRF_COOKIE_SECURE = NA_VERCEL
+
+WSGI_APPLICATION = "config.wsgi.application"
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -24,6 +39,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -43,15 +59,35 @@ TEMPLATES = [
     }
 ]
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
-        # BEGIN IMMEDIATE: o atomic() já pega o lock de escrita, então a
-        # checagem de conflito e o INSERT não intercalam entre requisições.
-        "OPTIONS": {"transaction_mode": "IMMEDIATE"},
+if os.environ.get("DATABASE_URL"):
+    # Produção (Vercel + Postgres/Neon): a Vercel preenche DATABASE_URL sozinha
+    # quando o banco é conectado ao projeto.
+    url = urllib.parse.urlparse(os.environ["DATABASE_URL"])
+    opcoes = dict(urllib.parse.parse_qsl(url.query))
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": url.path.lstrip("/"),
+            "USER": urllib.parse.unquote(url.username or ""),
+            "PASSWORD": urllib.parse.unquote(url.password or ""),
+            "HOST": url.hostname,
+            "PORT": url.port or 5432,
+            "OPTIONS": {"sslmode": opcoes.get("sslmode", "require")},
+            "CONN_MAX_AGE": 60,
+        }
     }
-}
+else:
+    # Local: SQLite na pasta do projeto. Na Vercel sem Postgres (modo demonstração),
+    # o único lugar gravável é /tmp — os dados somem quando o servidor reinicia.
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": Path("/tmp/coseg.sqlite3") if NA_VERCEL else BASE_DIR / "db.sqlite3",
+            # BEGIN IMMEDIATE: o atomic() já pega o lock de escrita, então a
+            # checagem de conflito e o INSERT não intercalam entre requisições.
+            "OPTIONS": {"transaction_mode": "IMMEDIATE"},
+        }
+    }
 
 LANGUAGE_CODE = "pt-br"
 TIME_ZONE = "America/Sao_Paulo"
@@ -59,4 +95,6 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = "static/"
+# A Vercel roda o collectstatic sozinha quando STATIC_ROOT existe e serve pela CDN.
+STATIC_ROOT = BASE_DIR / "staticfiles"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

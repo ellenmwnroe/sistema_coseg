@@ -1,3 +1,4 @@
+from django.db import connection
 from django.utils import timezone
 
 from core.domain.entidades import (
@@ -104,6 +105,11 @@ class ReservaDjangoRepository:
         return [_reserva_para_dominio(m) for m in consulta]
 
     def listar_do_veiculo_na_data(self, codigo, data):
+        if connection.in_atomic_block and connection.vendor == "postgresql":
+            # No Postgres, trava a linha do veículo até o fim da transação: duas
+            # reservas simultâneas do mesmo veículo checam o conflito uma de cada vez.
+            # (No SQLite isso já é garantido pelo transaction_mode IMMEDIATE.)
+            list(VeiculoModel.objects.select_for_update().filter(codigo=codigo).values("pk"))
         consulta = self._consulta().filter(veiculo__codigo=codigo, data=data)
         return [_reserva_para_dominio(m) for m in consulta]
 

@@ -62,6 +62,30 @@ adapters/entrada/web/
 A tela antecipa as regras (capacidade, conflito, data) para orientar quem preenche,
 mas quem decide é sempre o servidor. O painel antigo continua em `/painel/`.
 
+## Deploy na Vercel
+
+O projeto já vem pronto para a Vercel (`config/wsgi.py`, `pyproject.toml`, `build.py`).
+
+1. Em **Settings › General › Root Directory**, use `coseg_mobilidade/coseg_config`.
+2. **Banco (recomendado):** em **Storage**, crie um banco **Neon (Postgres)** e conecte ao
+   projeto. A Vercel cria a variável `DATABASE_URL` sozinha e, a cada deploy, o `build.py`
+   aplica as migrations e carrega a frota.
+3. Em **Settings › Environment Variables**, crie `DJANGO_SECRET_KEY` com um texto longo e
+   aleatório.
+4. Faça um novo deploy.
+
+Para criar o usuário do admin no banco da Vercel, rode no seu computador, com a
+`DATABASE_URL` do Neon no terminal:
+
+```
+python manage.py createsuperuser
+```
+
+**Sem Postgres** o site também sobe, em *modo demonstração*: o SQLite fica em `/tmp` do
+servidor e é recriado (com a frota) sempre que a Vercel liga um servidor novo, ou seja,
+as reservas somem de tempos em tempos e o admin não tem usuário. Serve para mostrar, não
+para usar de verdade.
+
 ## Modelo de dados
 
 | Tabela | Campos principais | Relacionamentos e restrições |

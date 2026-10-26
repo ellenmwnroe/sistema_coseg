@@ -230,5 +230,24 @@ class PainelTest(ApiTest):
         self.assertEqual(resposta.status_code, 200)
         self.assertContains(resposta, "AAAA-MM-DD")
 
-    def test_raiz_redireciona_para_o_painel(self):
-        self.assertRedirects(self.client.get("/"), reverse("painel"))
+    def test_raiz_serve_a_interface_web(self):
+        resposta = self.client.get("/")
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, 'id="app"')
+        self.assertContains(resposta, "web/js/main.js")
+
+
+class ColaboradoresTest(ApiTest):
+    def test_lista_colaboradores_e_setores(self):
+        self.criar()
+        self.criar(solicitante="João Lima", setor="Engenharia", saida="12:00", retorno="13:00")
+        corpo = self.client.get(reverse("api-colaboradores")).json()
+        nomes = [c["nome"] for c in corpo["colaboradores"]]
+        self.assertIn("Maria Silva", nomes)
+        self.assertIn("João Lima", nomes)
+        self.assertEqual(corpo["setores"], ["COSEG", "Engenharia", "Operações"])
+
+    def test_filtra_por_setor(self):
+        self.criar()
+        corpo = self.client.get(reverse("api-colaboradores"), {"setor": "operações"}).json()
+        self.assertEqual([c["nome"] for c in corpo["colaboradores"]], ["Maria Silva"])

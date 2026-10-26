@@ -1,4 +1,4 @@
-# COSEG Mobilidade — camada de servidor (PBL 1)
+# COSEG Mobilidade — reserva de veículos do Porto do Itaqui (PBL 1 + PBL 2)
 
 Sistema de reserva de veículos do Porto do Itaqui. Python + Django, organizado em
 Arquitetura Hexagonal (Ports and Adapters).
@@ -34,6 +34,34 @@ Admin: http://127.0.0.1:8000/admin/ (entre com o usuário criado no `createsuper
 O formulário de reservas do Admin passa pelas mesmas regras da API
 (capacidade, data, horários e conflito).
 
+## Interface web (PBL 2)
+
+Abra **http://127.0.0.1:8000/** com o servidor rodando. É uma página única em
+HTML + CSS + JavaScript puro (sem framework), servida pelo Django e consumindo a API.
+
+| Tela | O que faz |
+|---|---|
+| Início | Resumo do dia: reservas de hoje, veículos livres agora, quem está na rua e próximas saídas |
+| Agenda | Linha do tempo do dia, uma faixa por veículo. Clicar num espaço vazio abre a reserva já preenchida com veículo e horário |
+| Nova reserva | Formulário com painel ao vivo: veículos livres no horário, categoria mínima pelo número de pessoas, escolha automática. Erros do servidor aparecem no campo certo |
+| Reservas | Lista por dia com busca e filtros de período e status; editar e cancelar |
+| Frota | Card de cada veículo com placa, modelo, situação e ocupação do dia |
+
+```
+adapters/entrada/web/
+  templates/web/app.html     # esqueleto da página
+  static/web/app.css         # identidade visual (a mesma da apresentação)
+  static/web/js/
+    main.js                  # rotas (#/agenda, #/nova...) e relógio
+    api.js                   # chamadas à API e tratamento de erro
+    util.js                  # HTML seguro, datas e regras espelhadas do servidor
+    ui.js                    # avisos, diálogos, detalhe da reserva
+    telas/                   # inicio, agenda, formulario, reservas, frota
+```
+
+A tela antecipa as regras (capacidade, conflito, data) para orientar quem preenche,
+mas quem decide é sempre o servidor. O painel antigo continua em `/painel/`.
+
 ## Modelo de dados
 
 | Tabela | Campos principais | Relacionamentos e restrições |
@@ -65,6 +93,7 @@ python manage.py test tests
 | Método | Rota | Descrição |
 |---|---|---|
 | GET | `/api/veiculos/` | Lista a frota |
+| GET | `/api/colaboradores/?setor=` | Lista colaboradores e setores cadastrados (sugestões do formulário) |
 | GET | `/api/reservas/?data=AAAA-MM-DD` | Lista reservas (filtro opcional) |
 | POST | `/api/reservas/` | Cria reserva (201, 400 ou 409) |
 | GET, PUT, DELETE | `/api/reservas/<id>/` | Consulta, altera ou cancela (DELETE marca como cancelada, sem apagar) |

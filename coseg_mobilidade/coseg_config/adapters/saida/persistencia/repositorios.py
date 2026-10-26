@@ -1,6 +1,12 @@
 from django.utils import timezone
 
-from core.domain.entidades import CategoriaVeiculo, Reserva, StatusReserva, Veiculo
+from core.domain.entidades import (
+    CategoriaVeiculo,
+    Colaborador,
+    Reserva,
+    StatusReserva,
+    Veiculo,
+)
 
 from .models import ColaboradorModel, ReservaModel, SetorModel, VeiculoModel
 
@@ -50,6 +56,16 @@ def obter_ou_criar_colaborador(nome, nome_setor):
     if colaborador is None:
         colaborador = ColaboradorModel.objects.create(nome=nome, setor=setor)
     return colaborador
+
+
+class ColaboradorDjangoRepository:
+    def listar(self, setor=None):
+        consulta = ColaboradorModel.objects.select_related("setor").order_by("nome")
+        if setor:
+            consulta = consulta.filter(setor__nome__iexact=_normalizar(setor))
+        return [
+            Colaborador(m.nome, m.setor.nome, m.email, m.telefone) for m in consulta
+        ]
 
 
 class VeiculoDjangoRepository:

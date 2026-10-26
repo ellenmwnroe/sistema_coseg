@@ -18,7 +18,7 @@ from core.domain.excecoes import (
     VeiculoInativo,
 )
 
-from .composicao import montar_service
+from .composicao import montar_cadastro, montar_service
 from .serializacao import (
     ler_data,
     reserva_do_payload,
@@ -100,6 +100,30 @@ def _sucesso(mensagem, reserva, status=200):
 def veiculos(request):
     frota = [veiculo_para_dict(v) for v in montar_service().frota()]
     return JsonResponse({"sucesso": True, "total": len(frota), "veiculos": frota})
+
+
+@api
+@require_GET
+def colaboradores(request):
+    cadastro = montar_cadastro()
+    lista = [
+        {"nome": c.nome, "setor": c.setor, "email": c.email, "telefone": c.telefone}
+        for c in cadastro.colaboradores(request.GET.get("setor"))
+    ]
+    return JsonResponse(
+        {
+            "sucesso": True,
+            "total": len(lista),
+            "colaboradores": lista,
+            "setores": cadastro.setores(),
+        }
+    )
+
+
+@require_GET
+def app(request):
+    """Interface web do PBL 2 (HTML + CSS + JavaScript puro, consumindo a API)."""
+    return render(request, "web/app.html")
 
 
 @api

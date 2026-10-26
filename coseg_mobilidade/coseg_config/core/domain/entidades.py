@@ -25,6 +25,14 @@ class StatusReserva(Enum):
 
 
 @dataclass(frozen=True)
+class Colaborador:
+    nome: str
+    setor: str
+    email: str = ""
+    telefone: str = ""
+
+
+@dataclass(frozen=True)
 class Veiculo:
     codigo: str
     categoria: CategoriaVeiculo

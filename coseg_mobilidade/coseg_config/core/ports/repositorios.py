@@ -1,7 +1,7 @@
 from datetime import date
 from typing import Protocol
 
-from core.domain.entidades import CategoriaVeiculo, Reserva, Veiculo
+from core.domain.entidades import CategoriaVeiculo, Colaborador, Reserva, Veiculo
 
 
 class VeiculoRepository(Protocol):
@@ -22,3 +22,7 @@ class ReservaRepository(Protocol):
     def obter(self, reserva_id: int) -> Reserva | None: ...
 
     def salvar(self, reserva: Reserva) -> Reserva: ...
+
+
+class ColaboradorRepository(Protocol):
+    def listar(self, setor: str | None = None) -> list[Colaborador]: ...

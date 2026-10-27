@@ -138,6 +138,29 @@ export function situacaoMotorista(m, { categoria, data, saida, retorno, doDia, i
 
 export const primeiroNome = (nome) => (nome || "").split(" ")[0];
 
+const NIVEL_CNH = { B: 0, C: 1, D: 2, E: 3 };
+
+/** Antecipa quem o servidor vai escalar (mesmo critério do ordem_de_escala do core):
+ *  1. quem já estava na reserva (edição); 2. a CNH mais básica que serve, poupando
+ *  D/E para o coletivo; 3. quem rodou menos minutos no dia; 4. ordem alfabética. */
+export function escalarMotorista(motoristas, { categoria, data, saida, retorno, doDia, ignorarId, preferido }) {
+  const candidatos = motoristas
+    .map((m) => ({ m, ...situacaoMotorista(m, { categoria, data, saida, retorno, doDia, ignorarId }) }))
+    .filter((s) => s.livre)
+    .map((s) => ({
+      m: s.m,
+      carga: (doDia || [])
+        .filter((r) => r.motorista === s.m.matricula && r.id !== ignorarId && r.status !== "CANCELADA")
+        .reduce((total, r) => total + minutos(r.retorno) - minutos(r.saida), 0),
+    }));
+  candidatos.sort((a, b) =>
+    (a.m.matricula === preferido ? 0 : 1) - (b.m.matricula === preferido ? 0 : 1)
+    || NIVEL_CNH[a.m.cnh_categoria] - NIVEL_CNH[b.m.cnh_categoria]
+    || a.carga - b.carga
+    || a.m.nome.localeCompare(b.m.nome, "pt-BR"));
+  return candidatos[0] || null;
+}
+
 // ---------------------------------------------------------------- rota ---
 export function lerRota() {
   const hash = location.hash.replace(/^#\/?/, "");

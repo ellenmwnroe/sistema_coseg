@@ -7,7 +7,7 @@ import { api } from "../api.js";
 import { aviso, icone } from "../ui.js";
 import {
   CAPACIDADE, NOME_CATEGORIA, categoriaMinima, conflita, dataExtenso, duracao,
-  hojeISO, html, minutos, situacaoMotorista,
+  escalarMotorista, hojeISO, html, minutos, situacaoMotorista,
 } from "../util.js";
 
 const CAMPOS = ["solicitante", "setor", "atividade", "origem", "destino", "data", "saida", "retorno", "passageiros", "observacoes"];
@@ -37,7 +37,7 @@ export async function render(main, rota) {
   const inicial = original || {
     solicitante: "", setor: "", atividade: "", origem: "Porto do Itaqui", destino: "",
     data: p.get("data") || hojeISO(), saida: p.get("saida") || "08:00", retorno: p.get("retorno") || "10:00",
-    passageiros: 1, observacoes: "", veiculo: p.get("veiculo") || "", motorista: p.get("motorista") || "",
+    passageiros: 1, observacoes: "", veiculo: p.get("veiculo") || "",
   };
   const cache = new Map(); // data -> reservas daquele dia
 
@@ -106,11 +106,11 @@ export async function render(main, rota) {
               <div class="escolhas" id="escolhas"></div>
               <p class="msg-erro" id="erro-veiculo"></p>
             </fieldset>
-            <fieldset class="campo" id="campo-motorista" style="border:0;padding:0;margin:0">
-              <legend class="rotulo" style="margin-bottom:8px">Motorista</legend>
-              <div class="escolhas escolhas-motorista" id="escolhas-motorista"></div>
+            <div class="campo" id="campo-motorista">
+              <span class="rotulo">Motorista · escalado pelo sistema</span>
+              <div class="escala" id="escala" aria-live="polite"></div>
               <p class="msg-erro" id="erro-motorista"></p>
-            </fieldset>
+            </div>
             ${campo("observacoes", "Observações (opcional)", inicial.observacoes, { textarea: true, placeholder: "Ex.: levar EPI, motorista precisa de crachá" })}
           </div>
         </div>
@@ -154,7 +154,8 @@ export async function render(main, rota) {
   const $ = (id) => form.querySelector(`#${id}`);
   const valor = (nome) => (form.elements[nome]?.value ?? "").trim();
   let escolhido = inicial.veiculo || "";
-  let motoristaEscolhido = inicial.motorista || "";
+  // Na edição, o servidor mantém o motorista atual se ele ainda puder.
+  const preferido = original?.motorista || null;
 
   // ---------------------------------------------------------- leitura ---
   const passageiros = () => Number($("passageiros").value) || 0;
@@ -248,38 +249,42 @@ export async function render(main, rota) {
       ? veiculos.find((v) => v.codigo === escolhido)?.categoria
       : primeiroLivre?.v.categoria || categoria;
     const doDia = await reservasDoDia(data);
-    const situMotoristas = motoristas.map((m) => ({
-      m,
-      ...situacaoMotorista(m, { categoria: categoriaDoVeiculo, data, saida, retorno, doDia, ignorarId: original?.id }),
-    }));
-    let avisoMotorista = "";
-    const atualMotorista = situMotoristas.find((s) => s.m.matricula === motoristaEscolhido);
-    if (motoristaEscolhido && atualMotorista && !atualMotorista.livre) {
-      avisoMotorista = `${atualMotorista.m.nome} não pode ser escalado(a) (${atualMotorista.motivo.toLowerCase()}). Ficou "a definir".`;
-      motoristaEscolhido = "";
-    }
-    $("escolhas-motorista").innerHTML = html`
-      <div class="escolha escolha-auto">
-        <input type="radio" name="motorista" id="m-nenhum" value="" ${motoristaEscolhido ? "" : "checked"}>
-        <label for="m-nenhum"><strong>A definir</strong><small>escalar depois</small></label>
+    const contexto = { categoria: categoriaDoVeiculo, data, saida, retorno, doDia, ignorarId: original?.id };
+    const escala = motoristas.length ? escalarMotorista(motoristas, { ...contexto, preferido }) : null;
+    const situMotoristas = motoristas.map((m) => ({ m, ...situacaoMotorista(m, contexto) }));
+    const habilitados = situMotoristas.filter((s) => s.livre).length;
+    const exigida = categoriaDoVeiculo === "VC" ? "D ou E" : "B ou superior";
+
+    $("escala").innerHTML = (!motoristas.length ? html`
+      <p class="contador-nota">Nenhum motorista cadastrado: a reserva segue sem escala.</p>` : html`
+      <div class="escala-escolhido ${escala ? "" : "vazio"}">
+        ${escala ? html`
+          <span class="escala-avatar" aria-hidden="true">${escala.m.nome.split(" ").map((p) => p[0]).slice(0, 2).join("")}</span>
+          <span>
+            <strong>${escala.m.nome}</strong>
+            <small>CNH ${escala.m.cnh_categoria} · ${escala.m.matricula === preferido ? "continua na reserva" : escala.carga ? `já rodou ${Math.round(escala.carga / 6) / 10} h no dia` : "livre o dia todo"}</small>
+          </span>` : html`
+          <span><strong>Ninguém disponível</strong><small>Nenhum motorista com CNH ${exigida} livre nesse horário.</small></span>`}
       </div>
-      ${situMotoristas.map((s) => html`
-        <div class="escolha">
-          <input type="radio" name="motorista" id="m-${s.m.matricula}" value="${s.m.matricula}"
-                 ${motoristaEscolhido === s.m.matricula ? "checked" : ""} ${s.livre ? "" : "disabled"}>
-          <label for="m-${s.m.matricula}"><strong class="nome-pessoa">${s.m.nome}</strong><small>CNH ${s.m.cnh_categoria} · ${s.motivo}</small></label>
-        </div>`)}`.texto;
-    const escalado = situMotoristas.find((s) => s.m.matricula === motoristaEscolhido)?.m;
-    const livresMotoristas = situMotoristas.filter((s) => s.livre).length;
-    $("r-motorista").textContent = escalado ? escalado.nome : "A definir";
-    $("r-motorista-nota").textContent = escalado
-      ? `CNH ${escalado.cnh_categoria}${escalado.telefone ? ` · ${escalado.telefone}` : ""}`
-      : `${livresMotoristas} motorista(s) habilitado(s) e livre(s) para ${categoriaDoVeiculo || "o veículo"}`;
+      <p class="contador-nota">Critério: CNH ${exigida} válida e livre no horário. Entre esses, a CNH mais básica que serve (para poupar quem dirige o coletivo) e quem rodou menos no dia.</p>
+      <ul class="escala-lista">
+        ${situMotoristas.map((s) => html`
+          <li class="${s.livre ? "livre" : ""} ${escala && s.m.matricula === escala.m.matricula ? "escolhido" : ""}">
+            <span class="nome-pessoa">${s.m.nome}</span>
+            <span class="mono">CNH ${s.m.cnh_categoria}</span>
+            <span>${escala && s.m.matricula === escala.m.matricula ? "Será escalado(a)" : s.motivo}</span>
+          </li>`)}
+      </ul>`).texto;
+
+    $("r-motorista").textContent = !motoristas.length ? "Sem escala" : escala ? `Automático → ${escala.m.nome}` : "Ninguém disponível";
+    $("r-motorista-nota").textContent = motoristas.length
+      ? `${habilitados} motorista(s) com CNH ${exigida} livre(s) no horário`
+      : "";
 
     // Alertas antecipados (o servidor confirma ao enviar)
     const alertas = [];
     if (avisoTroca) alertas.push(["aviso", avisoTroca]);
-    if (avisoMotorista) alertas.push(["aviso", avisoMotorista]);
+    if (motoristas.length && !escala && categoria) alertas.push(["erro", `Nenhum motorista com CNH ${exigida} livre nesse horário. Tente outro horário.`]);
     if (data && data < hojeISO()) alertas.push(["erro", "A data está no passado."]);
     if (saida && retorno && minutos(retorno) <= minutos(saida)) alertas.push(["erro", "O retorno precisa ser depois da saída."]);
     if (!categoria) alertas.push(["erro", "Grupos acima de 18 pessoas não podem ser atendidos pela frota."]);
@@ -319,7 +324,6 @@ export async function render(main, rota) {
     dados.passageiros = passageiros();
     if (escolhido) dados.veiculo = escolhido;
     else dados.categoria = categoriaMinima(dados.passageiros) || "VC";
-    if (motoristaEscolhido) dados.motorista = motoristaEscolhido;
 
     const botao = $("enviar");
     botao.disabled = true;
@@ -328,7 +332,7 @@ export async function render(main, rota) {
     try {
       const resposta = editando ? await api.atualizar(original.id, dados) : await api.criar(dados);
       const r = resposta.reserva;
-      aviso(`${resposta.mensagem} ${r.veiculo} · ${r.saida}–${r.retorno}.`);
+      aviso(`${resposta.mensagem} ${r.veiculo} · ${r.saida}–${r.retorno}${r.motorista_nome ? ` · motorista ${r.motorista_nome}` : ""}.`);
       location.hash = `#/agenda?data=${r.data}`;
     } catch (erro) {
       const corpo = erro.corpo || {};
@@ -344,7 +348,6 @@ export async function render(main, rota) {
       if (erro.status === 409) {
         // A agenda mudou (alguém reservou antes): recarrega a disponibilidade.
         cache.delete(dados.data);
-        if (corpo.codigo === "CONFLITO_DE_MOTORISTA") motoristaEscolhido = "";
         await atualizar();
       }
       primeiro?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -357,7 +360,7 @@ export async function render(main, rota) {
 
   // ---------------------------------------------------------- eventos ---
   form.addEventListener("input", (e) => {
-    if (e.target.name === "veiculo" || e.target.name === "motorista") return;
+    if (e.target.name === "veiculo") return;
     e.target.closest(".campo")?.classList.remove("erro");
     if (e.target.name === "solicitante") {
       // Nome conhecido: completa o setor sozinho.
@@ -371,12 +374,6 @@ export async function render(main, rota) {
       escolhido = e.target.value;
       $("campo-veiculo").classList.remove("erro");
       $("erro-veiculo").innerHTML = "";
-      atualizar();
-    }
-    if (e.target.name === "motorista") {
-      motoristaEscolhido = e.target.value;
-      $("campo-motorista").classList.remove("erro");
-      $("erro-motorista").innerHTML = "";
       atualizar();
     }
   });

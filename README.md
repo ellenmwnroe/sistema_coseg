@@ -43,7 +43,7 @@ HTML + CSS + JavaScript puro (sem framework), servida pelo Django e consumindo a
 |---|---|
 | Início | Resumo do dia: reservas de hoje, veículos livres agora, quem está na rua e próximas saídas |
 | Agenda | Linha do tempo do dia, por veículo ou **por motorista** (com a faixa "A definir"). Clicar num espaço vazio abre a reserva já preenchida com veículo e horário |
-| Nova reserva | Formulário com painel ao vivo: veículos livres no horário, categoria mínima pelo número de pessoas, escolha automática. Erros do servidor aparecem no campo certo |
+| Nova reserva | Formulário com painel ao vivo: veículos livres no horário, categoria mínima pelo número de pessoas, escolha automática do veículo e **prévia do motorista que será escalado** (com o motivo de cada um estar ou não disponível). Erros do servidor aparecem no campo certo |
 | Reservas | Lista por dia com busca e filtros de período e status; editar e cancelar |
 | Frota | Abas **Veículos** e **Motoristas**: placa, modelo, CNH, validade, situação e ocupação do dia |
 
@@ -105,9 +105,15 @@ Todas as tabelas guardam `criado_em`/`atualizado_em` (na reserva, `criada_em`/`a
 
 - **Status da reserva:** `CONFIRMADA` → `CANCELADA` ou `CONCLUIDA`. Cancelar não apaga:
   a reserva fica no histórico (com `cancelada_em`) e deixa de ocupar o veículo.
-- **Motorista (opcional na reserva):** precisa estar ativo, ter CNH compatível (leve: B ou
-  superior; coletivo de 18 lugares: D ou E), CNH válida na data e não estar escalado em outra
-  reserva no mesmo horário. Os motoristas do `carregar_seed` são fictícios, só para demonstração.
+- **Escala automática de motorista:** quem pede o veículo não escolhe o motorista. Ao criar
+  a reserva, o sistema escala um motorista **ativo**, com **CNH compatível** com o veículo
+  escolhido (leve: B ou superior; coletivo de 18 lugares: D ou E), **CNH válida** na data e
+  **livre** no horário. Entre os que podem, escolhe: (1) numa edição, o motorista que já estava,
+  se ainda puder; (2) a CNH mais básica que serve, para poupar quem dirige o coletivo; (3) quem
+  rodou menos minutos no dia; (4) ordem alfabética. Sem ninguém disponível, a reserva é recusada
+  (`SEM_MOTORISTA_DISPONIVEL`, 409). O COSEG pode trocar a escala à mão pelo admin (ou mandando
+  `"motorista"` na API), e as mesmas regras são conferidas. Os motoristas do `carregar_seed` são
+  fictícios, só para demonstração.
 - **Veículo inativo** (ex.: em manutenção) não pode ser reservado nem é escolhido na
   alocação automática por categoria.
 - A API continua recebendo `solicitante` e `setor` como texto: o servidor reaproveita o
@@ -135,6 +141,7 @@ python manage.py test tests
 Respostas de erro: `{"sucesso": false, "codigo": "...", "erro": "...", "campo": "..."}`.
 Códigos: `CAMPOS_OBRIGATORIOS`, `CAPACIDADE_EXCEDIDA`, `PERIODO_INVALIDO`,
 `VEICULO_INATIVO`, `MOTORISTA_NAO_HABILITADO`, `CNH_VENCIDA`, `MOTORISTA_INATIVO` (400);
-`CONFLITO_DE_HORARIO`, `CONFLITO_DE_MOTORISTA`, `SEM_VEICULO_DISPONIVEL`,
+`CONFLITO_DE_HORARIO`, `CONFLITO_DE_MOTORISTA`, `SEM_VEICULO_DISPONIVEL`, `SEM_MOTORISTA_DISPONIVEL`,
 `RESERVA_NAO_EDITAVEL` (409); `RESERVA_NAO_ENCONTRADA` (404).
-O POST/PUT de reserva aceita o campo opcional `"motorista": "MOT-001"` (matrícula).
+O motorista é escalado automaticamente; o campo opcional `"motorista": "MOT-001"` (matrícula)
+no POST/PUT serve só para o COSEG indicar alguém à mão.

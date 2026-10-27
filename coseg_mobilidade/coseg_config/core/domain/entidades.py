@@ -36,6 +36,11 @@ class CategoriaCnh(Enum):
             return self in (CategoriaCnh.D, CategoriaCnh.E)
         return True
 
+    @property
+    def nivel(self):
+        """Ordem das categorias: B < C < D < E (usada para poupar quem dirige o coletivo)."""
+        return "BCDE".index(self.value)
+
     @staticmethod
     def exigida(categoria_veiculo):
         return "D ou E" if categoria_veiculo is CategoriaVeiculo.COLETIVO else "B ou superior"
@@ -55,6 +60,9 @@ class Motorista:
 
     def cnh_valida_em(self, dia):
         return dia <= self.validade_cnh
+
+    def pode_ser_escalado_para(self, categoria_veiculo, dia):
+        return self.ativo and self.pode_dirigir(categoria_veiculo) and self.cnh_valida_em(dia)
 
 
 @dataclass(frozen=True)
@@ -95,6 +103,12 @@ class Reserva:
     status: StatusReserva = StatusReserva.CONFIRMADA
     motorista: Motorista | None = None
     id: int | None = None
+
+    @property
+    def duracao_minutos(self):
+        return (self.retorno.hour * 60 + self.retorno.minute) - (
+            self.saida.hour * 60 + self.saida.minute
+        )
 
     def _sobrepoe(self, outra):
         # Reserva cancelada não ocupa mais ninguém.

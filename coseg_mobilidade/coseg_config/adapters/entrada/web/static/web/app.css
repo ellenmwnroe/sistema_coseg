@@ -360,6 +360,19 @@ button.item:hover .item-titulo { text-decoration: underline; text-underline-offs
 .motorista-nome { font-size: 30px; font-weight: 500; letter-spacing: -.03em; line-height: 1.1; }
 .escolhas-motorista { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
 .escolha label .nome-pessoa { font-family: var(--fonte); font-weight: 600; }
+.escala { display: flex; flex-direction: column; gap: 12px; }
+.escala-escolhido { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: var(--r-md); background: var(--tinta); color: var(--fundo); }
+.escala-escolhido strong { display: block; font-size: 18px; font-weight: 600; }
+.escala-escolhido small { display: block; color: var(--menta); font-size: 13px; }
+.escala-escolhido.vazio { background: var(--perigo-fundo); color: var(--perigo); }
+.escala-escolhido.vazio small { color: var(--perigo); }
+.escala-avatar { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: var(--menta); color: var(--tinta); font-weight: 700; flex: none; }
+.escala-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.escala-lista li { display: grid; grid-template-columns: minmax(0, 1fr) 70px minmax(0, 1.1fr); gap: 10px; padding: 9px 4px; border-top: 1px solid var(--linha); font-size: 14px; color: var(--tinta-3); }
+.escala-lista li:first-child { border-top: 0; }
+.escala-lista li.livre { color: var(--tinta); }
+.escala-lista li.escolhido { color: var(--verde); font-weight: 600; }
+.escala-lista li.escolhido span:last-child::before { content: "● "; color: var(--menta); }
 
 .grupo-dia { display: flex; flex-direction: column; gap: 10px; }
 .grupo-dia h2 { font-size: 15px; font-weight: 600; color: var(--tinta-2); display: flex; gap: 10px; align-items: center; }

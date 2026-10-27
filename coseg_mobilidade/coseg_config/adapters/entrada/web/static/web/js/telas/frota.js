@@ -101,7 +101,7 @@ function telaMotoristas(motoristas, ativas, hoje) {
         <div>
           <p class="sobrelinha">Equipe do COSEG</p>
           <h1 class="titulo">${motoristas.length} motoristas</h1>
-          <p class="subtitulo">${ativos.length} ativos · ${coletivo} habilitados para o coletivo (CNH D ou E)${vencidas ? ` · ${vencidas} com CNH vencida` : ""}</p>
+          <p class="subtitulo">${ativos.length} ativos · ${coletivo} habilitados para o coletivo (CNH D ou E)${vencidas ? ` · ${vencidas} com CNH vencida` : ""}. A escala é automática, pela CNH e pela disponibilidade.</p>
         </div>
         <div class="barra-ferramentas">
           ${abas("motoristas")}
@@ -135,8 +135,8 @@ function telaMotoristas(motoristas, ativas, hoje) {
               ${cnh.classe ? html`<div class="alerta ${cnh.classe}">${icone.alerta}<span>CNH ${cnh.texto.toLowerCase()}${cnh.ok ? "" : ": não pode ser escalado(a)"}.</span></div>` : ""}
               ${miniDia(escalas)}
               ${disponivel
-                ? html`<a class="botao ${dirigeColetivo ? "botao-menta" : "botao-escuro"}" href="#/nova?motorista=${m.matricula}">Escalar ${primeiroNome(m.nome)} ${icone.seta}</a>`
-                : html`<p class="kpi-nota">${m.ativo ? "Atualize a CNH no admin para voltar a escalar." : "Inativo. Reative no admin quando voltar."}</p>`}
+                ? html`<a class="botao ${dirigeColetivo ? "botao-menta" : "botao-escuro"}" href="#/agenda?modo=motoristas">Ver escala de ${primeiroNome(m.nome)} ${icone.seta}</a>`
+                : html`<p class="kpi-nota">${m.ativo ? "Fora da escala automática até a CNH ser renovada no admin." : "Inativo: fora da escala automática. Reative no admin quando voltar."}</p>`}
             </article>`;
         })}
       </div>` : html`

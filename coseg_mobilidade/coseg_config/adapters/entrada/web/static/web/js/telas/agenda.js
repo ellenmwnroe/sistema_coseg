@@ -145,8 +145,9 @@ export async function render(main, rota) {
         reservas: visiveis.filter((r) => r.motorista === m.matricula),
       };
     });
-    // Faixa extra com o que ainda precisa de motorista.
-    linhas.push({
+    // Faixa extra com reservas sem motorista (antigas, de antes da escala automática).
+    const semMotorista = visiveis.filter((r) => !r.motorista);
+    if (semMotorista.length) linhas.push({
       tipo: "sem-motorista",
       chave: "",
       titulo: "A definir",
@@ -156,7 +157,7 @@ export async function render(main, rota) {
       sub: "Reservas para escalar",
       disponivel: false,
       motivo: "",
-      reservas: visiveis.filter((r) => !r.motorista),
+      reservas: semMotorista,
     });
     return linhas;
   }
@@ -175,7 +176,7 @@ export async function render(main, rota) {
       const semMotorista = ativas.filter((r) => !r.motorista).length;
       main.querySelector("#agenda-resumo").textContent =
         `${qtd} · ${escalados} motorista(s) escalado(s) · ${semMotorista} sem motorista`;
-      main.querySelector("#agenda-dica").innerHTML = html`${icone.info} Clique num espaço vazio na faixa de um motorista para criar uma reserva já com ele(a) escalado(a). A faixa “A definir” mostra o que ainda precisa de motorista.`.texto;
+      main.querySelector("#agenda-dica").innerHTML = html`${icone.info} Clique num espaço vazio para pedir um veículo naquele horário: o sistema escala automaticamente quem tem a CNH certa e está livre.`.texto;
     }
 
     // Janela padrão 06h–22h, alargada se houver reserva fora dela.
@@ -294,8 +295,10 @@ export async function render(main, rota) {
         return;
       }
       const { saida, retorno } = horarioNoPonto(trilho, e.clientX);
+      // Na faixa de um veículo, já leva o veículo; motorista quem escolhe é o sistema.
       const params = new URLSearchParams({
-        [trilho.dataset.tipo]: trilho.dataset.chave, data: estado.data, saida: paraHHMM(saida), retorno: paraHHMM(retorno),
+        ...(trilho.dataset.tipo === "veiculo" ? { veiculo: trilho.dataset.chave } : {}),
+        data: estado.data, saida: paraHHMM(saida), retorno: paraHHMM(retorno),
       });
       location.hash = `#/nova?${params}`;
       return;

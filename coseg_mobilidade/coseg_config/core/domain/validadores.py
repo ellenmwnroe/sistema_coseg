@@ -98,6 +98,20 @@ class ValidadorConflito:
             raise ConflitoDeHorario(conflito)
 
 
+def ordem_de_escala(motorista, carga_minutos, preferido=None):
+    """Critério para escalar automaticamente, do mais ao menos indicado:
+    1. o motorista que já estava na reserva (numa edição), se ainda puder;
+    2. a CNH mais básica que serve — poupa quem tem D/E para o coletivo;
+    3. quem rodou menos minutos no dia — divide o trabalho;
+    4. ordem alfabética, para o resultado ser sempre o mesmo."""
+    return (
+        not (preferido and motorista.matricula == preferido.matricula),
+        motorista.categoria_cnh.nivel,
+        carga_minutos,
+        motorista.nome,
+    )
+
+
 class ValidadorMotorista:
     """Motorista é opcional; quando informado, precisa estar ativo, habilitado para a
     categoria do veículo, com CNH válida na data e livre no horário."""

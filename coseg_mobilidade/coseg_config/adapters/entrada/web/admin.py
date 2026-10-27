@@ -139,6 +139,10 @@ class ReservaAdminForm(forms.ModelForm):
             "Deixe vazio e escolha a categoria para o sistema alocar "
             "o primeiro veículo livre."
         )
+        self.fields["motorista"].help_text = (
+            "Deixe vazio para o sistema escalar automaticamente um motorista com a CNH "
+            "certa e livre no horário. Preencha só para trocar a escala à mão."
+        )
 
     def clean(self):
         dados = super().clean()
@@ -186,6 +190,9 @@ class ReservaAdminForm(forms.ModelForm):
             if veiculo is None:
                 # Pedido só por categoria: grava o veículo que o service alocou.
                 dados["veiculo"] = VeiculoModel.objects.get(codigo=reserva.veiculo.codigo)
+            if motorista is None and reserva.motorista is not None:
+                # Escala automática: grava o motorista que o service escolheu.
+                dados["motorista"] = MotoristaModel.objects.get(matricula=reserva.motorista.matricula)
         return dados
 
 

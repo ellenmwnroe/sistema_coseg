@@ -103,3 +103,14 @@ class ConflitoDeMotorista(ReservaInvalida):
             f"({reserva_existente.veiculo.codigo}).",
             campo="motorista",
         )
+
+
+class SemMotoristaDisponivel(ReservaInvalida):
+    def __init__(self, categoria_veiculo, data, saida, retorno):
+        from core.domain.entidades import CategoriaCnh
+
+        super().__init__(
+            f"Nenhum motorista com CNH {CategoriaCnh.exigida(categoria_veiculo)} está livre em "
+            f"{data:%d/%m/%Y} das {saida:%H:%M} às {retorno:%H:%M}.",
+            campo="motorista",
+        )

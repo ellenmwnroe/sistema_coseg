@@ -10,6 +10,7 @@ from core.domain.excecoes import (
     CamposObrigatorios,
     CapacidadeExcedida,
     CnhVencida,
+    SemMotoristaDisponivel,
     ConflitoDeHorario,
     ConflitoDeMotorista,
     MotoristaInativo,
@@ -35,6 +36,7 @@ from .serializacao import (
 ERROS_DE_DOMINIO = [
     (ConflitoDeHorario, 409, "CONFLITO_DE_HORARIO"),
     (ConflitoDeMotorista, 409, "CONFLITO_DE_MOTORISTA"),
+    (SemMotoristaDisponivel, 409, "SEM_MOTORISTA_DISPONIVEL"),
     (MotoristaNaoHabilitado, 400, "MOTORISTA_NAO_HABILITADO"),
     (CnhVencida, 400, "CNH_VENCIDA"),
     (MotoristaInativo, 400, "MOTORISTA_INATIVO"),

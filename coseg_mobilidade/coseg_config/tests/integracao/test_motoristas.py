@@ -17,6 +17,7 @@ from core.domain.excecoes import (
     MotoristaInativo,
     MotoristaNaoHabilitado,
     ReservaInvalida,
+    SemMotoristaDisponivel,
 )
 
 AMANHA = date.today() + timedelta(days=1)
@@ -80,10 +81,16 @@ class MotoristaServiceTest(TestCase):
         with self.assertRaises(MotoristaInativo):
             self.service.criar(pedido(), "VL-02", "MOT-005")
 
-    def test_editar_sem_motorista_remove_a_escala(self):
+    def test_editar_mantem_o_motorista_se_ele_ainda_puder(self):
         criada = self.service.criar(pedido(), "VL-02", "MOT-001")
-        editada = self.service.atualizar(criada.id, pedido(), "VL-02")
-        self.assertIsNone(editada.motorista)
+        editada = self.service.atualizar(criada.id, pedido(destino="Terminal"), "VL-02")
+        self.assertEqual(editada.motorista.matricula, "MOT-001")
+
+    def test_editar_para_coletivo_troca_motorista_sem_cnh_d(self):
+        criada = self.service.criar(pedido(), "VL-02")  # escala Beatriz (CNH B)
+        self.assertEqual(criada.motorista.matricula, "MOT-002")
+        editada = self.service.atualizar(criada.id, pedido(passageiros=10), "VC-01")
+        self.assertIn(editada.motorista.categoria_cnh.value, ("D", "E"))
 
     def test_cancelar_libera_o_motorista(self):
         criada = self.service.criar(pedido(), "VL-02", "MOT-001")
@@ -129,10 +136,18 @@ class MotoristaApiTest(TestCase):
         beatriz = next(m for m in corpo["motoristas"] if m["matricula"] == "MOT-002")
         self.assertEqual(beatriz["dirige"], ["VL"])
 
-    def test_reserva_sem_motorista_continua_valendo(self):
+    def test_motorista_e_escalado_automaticamente(self):
         resposta = self.enviar("post", self.url, self.payload())
         self.assertEqual(resposta.status_code, 201)
-        self.assertIsNone(resposta.json()["reserva"]["motorista"])
+        self.assertEqual(resposta.json()["reserva"]["motorista_nome"], "Beatriz Lopes")
+
+    def test_sem_motorista_livre_retorna_409(self):
+        MotoristaModel.objects.exclude(matricula="MOT-002").update(ativo=False)
+        self.enviar("post", self.url, self.payload())
+        resposta = self.enviar("post", self.url, self.payload(veiculo="VL-03"))
+        self.assertEqual(resposta.status_code, 409)
+        self.assertEqual(resposta.json()["codigo"], "SEM_MOTORISTA_DISPONIVEL")
+        self.assertEqual(resposta.json()["campo"], "motorista")
 
     def test_reserva_com_motorista(self):
         resposta = self.enviar("post", self.url, self.payload(motorista="MOT-002"))
@@ -178,3 +193,60 @@ class MotoristaAdminTest(TestCase):
         resposta = self.client.post(reverse("admin:persistencia_reservamodel_add"), dados)
         erros = resposta.context["adminform"].form.errors
         self.assertIn("D ou E", erros["motorista"][0])
+
+
+class EscalaAutomaticaTest(TestCase):
+    """Seed: Antônio (D), Beatriz (B), Carlos (E), Daniela (B), Edson (D)."""
+
+    def setUp(self):
+        call_command("carregar_seed", verbosity=0)
+        self.service = montar_service()
+
+    def escala(self, *args, **extra):
+        return self.service.criar(pedido(**extra), *args).motorista
+
+    def test_veiculo_leve_prefere_cnh_b(self):
+        # Poupa quem tem D/E para o coletivo.
+        self.assertEqual(self.escala("VL-02").categoria_cnh.value, "B")
+
+    def test_coletivo_so_escala_d_ou_e_e_prefere_d(self):
+        motorista = self.escala("VC-01", passageiros=10)
+        self.assertEqual(motorista.categoria_cnh.value, "D")
+
+    def test_divide_o_trabalho_no_dia(self):
+        primeira = self.escala("VL-02", saida=time(7), retorno=time(9))
+        segunda = self.escala("VL-03", saida=time(14), retorno=time(16))
+        self.assertNotEqual(primeira.matricula, segunda.matricula)
+        self.assertEqual({primeira.nome, segunda.nome}, {"Beatriz Lopes", "Daniela Costa"})
+
+    def test_quando_os_b_estao_ocupados_usa_um_d(self):
+        self.escala("VL-02")
+        self.escala("VL-03")
+        terceira = self.escala("VL-04")
+        self.assertEqual(terceira.categoria_cnh.value, "D")
+
+    def test_pula_cnh_vencida_e_inativo(self):
+        MotoristaModel.objects.filter(matricula="MOT-002").update(ativo=False)
+        MotoristaModel.objects.filter(matricula="MOT-004").update(cnh_validade=AMANHA - timedelta(days=1))
+        self.assertEqual(self.escala("VL-02").categoria_cnh.value, "D")
+
+    def test_sem_ninguem_habilitado_e_livre(self):
+        # Só o Antônio (D) fica disponível para o coletivo.
+        MotoristaModel.objects.filter(matricula__in=["MOT-003", "MOT-005"]).update(ativo=False)
+        self.assertEqual(self.escala("VC-01", passageiros=10).matricula, "MOT-001")
+        # Mesmo horário, outro coletivo: os B não podem e o Antônio está ocupado.
+        with self.assertRaises(SemMotoristaDisponivel):
+            self.service.criar(pedido(passageiros=10), "VC-02")
+
+    def test_cancelar_devolve_o_motorista_para_a_escala(self):
+        criada = self.service.criar(pedido(), "VL-02")
+        self.service.cancelar(criada.id)
+        de_novo = self.escala("VL-03")
+        self.assertEqual(de_novo.matricula, criada.motorista.matricula)
+
+    def test_sem_motoristas_cadastrados_reserva_segue_sem_escala(self):
+        MotoristaModel.objects.all().delete()
+        self.assertIsNone(self.escala("VL-02"))
+
+    def test_indicacao_manual_ainda_vale(self):
+        self.assertEqual(self.escala("VL-02", "MOT-003").matricula, "MOT-003")

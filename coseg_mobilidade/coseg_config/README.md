@@ -87,15 +87,18 @@ O projeto já vem pronto para a Vercel (`config/wsgi.py`, `pyproject.toml`, `bui
    aleatório.
 4. Faça um novo deploy.
 
-Para criar o usuário do admin no banco da Vercel, rode no seu computador, com a
-`DATABASE_URL` do Neon no terminal:
+Para criar o usuário do admin **sem terminal**, crie na Vercel as variáveis
+`DJANGO_SUPERUSER_USERNAME` e `DJANGO_SUPERUSER_PASSWORD` e faça um novo deploy: o
+`build.py` cria o usuário (ou atualiza a senha, se ele já existir). Ou, no seu computador,
+com o endereço do banco no terminal (`SUPABASE_DB_URL` ou `DATABASE_URL`):
 
 ```
 python manage.py createsuperuser
 ```
 
 **Usando Supabase em vez de Neon:** no Supabase, abra **Connect** no projeto e copie a URL do
-**Transaction pooler** (porta 6543). Cole em `DATABASE_URL` nas variáveis da Vercel, trocando
+**Transaction pooler** (porta 6543). Cole em `SUPABASE_DB_URL` (tem prioridade sobre a
+`DATABASE_URL`, que alguma integração pode ter criado com outro valor) nas variáveis da Vercel, trocando
 `[YOUR-PASSWORD]` pela senha do banco. O projeto reconhece o pooler sozinho. Não use a
 "Direct connection": ela só funciona em IPv6, e a Vercel não alcança.
 

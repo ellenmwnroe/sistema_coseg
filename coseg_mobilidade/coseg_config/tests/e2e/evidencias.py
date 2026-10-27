@@ -234,9 +234,12 @@ def responsividade(navegador) -> None:
             sobra = page.evaluate("document.documentElement.scrollWidth - window.innerWidth")
             if sobra > 0:
                 estouros.append(f"{nome} (+{sobra}px)")
+            menu = page.evaluate("(() => { const m = document.querySelector('.menu'); return m.scrollWidth - m.clientWidth })()")
+            if menu > 0:
+                estouros.append(f"menu de {nome} cortado (+{menu}px)")
             if nome_tam != "desktop" or nome in ("inicio", "agenda"):
                 print_(page, f"resp-{nome_tam}-{nome}")
-        checar("Responsividade", f"{nome_tam} {largura}px: nenhuma tela com rolagem horizontal",
+        checar("Responsividade", f"{nome_tam} {largura}px: nenhuma tela com rolagem horizontal e o menu inteiro visível",
                not estouros, ", ".join(estouros))
         page.close()
 

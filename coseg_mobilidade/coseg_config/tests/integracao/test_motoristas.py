@@ -6,6 +6,7 @@ from django.core.management import call_command
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from adapters.saida.persistencia.models import MotoristaModel, ReservaModel
 from adapters.saida.persistencia.repositorios import obter_ou_criar_colaborador
@@ -20,7 +21,7 @@ from core.domain.excecoes import (
     SemMotoristaDisponivel,
 )
 
-AMANHA = date.today() + timedelta(days=1)
+AMANHA = timezone.localdate() + timedelta(days=1)
 
 
 def pedido(saida=time(8), retorno=time(10), passageiros=3, **extra):

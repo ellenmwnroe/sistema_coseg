@@ -4,10 +4,11 @@ from datetime import date, timedelta
 from django.core.management import call_command
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from adapters.saida.persistencia.models import ReservaModel, VeiculoModel
 
-AMANHA = date.today() + timedelta(days=1)
+AMANHA = timezone.localdate() + timedelta(days=1)
 
 
 def payload(**extra):
@@ -103,7 +104,7 @@ class CriacaoTest(ApiTest):
         self.assertEqual(resposta.json()["codigo"], "CAPACIDADE_EXCEDIDA")
 
     def test_data_passada(self):
-        ontem = (date.today() - timedelta(days=1)).isoformat()
+        ontem = (timezone.localdate() - timedelta(days=1)).isoformat()
         resposta = self.criar(data=ontem)
         self.assertEqual(resposta.status_code, 400)
         self.assertEqual(resposta.json()["codigo"], "PERIODO_INVALIDO")

@@ -1,5 +1,5 @@
 import unittest
-from datetime import date, time, timedelta
+from datetime import date, datetime, time, timedelta
 
 from core.domain.entidades import (
     CategoriaCnh,
@@ -154,6 +154,42 @@ class PeriodoTest(unittest.TestCase):
         validador = ValidadorPeriodo(hoje=lambda: date(2026, 8, 19))
         with self.assertRaises(PeriodoInvalido):
             validador.validar(reserva(data=date(2026, 8, 18)))
+
+
+class HorarioQueJaPassouTest(unittest.TestCase):
+    """Com relógio (agora = 27/10/2026 12:22), a saída de hoje não pode ter passado."""
+
+    HOJE = date(2026, 10, 27)
+
+    def setUp(self):
+        self.validador = ValidadorPeriodo(agora=lambda: datetime(2026, 10, 27, 12, 22, 40))
+
+    def test_saida_hoje_antes_de_agora_e_rejeitada_no_campo_saida(self):
+        with self.assertRaises(PeriodoInvalido) as ctx:
+            self.validador.validar(reserva(time(11), time(12), data=self.HOJE))
+        self.assertEqual(ctx.exception.campo, "saida")
+        self.assertIn("12:22", ctx.exception.mensagem)
+
+    def test_saida_no_minuto_atual_ou_depois_e_aceita(self):
+        self.validador.validar(reserva(time(12, 22), time(13), data=self.HOJE))
+        self.validador.validar(reserva(time(15), time(16), data=self.HOJE))
+
+    def test_amanha_cedo_e_aceito(self):
+        self.validador.validar(reserva(time(6), time(7), data=self.HOJE + timedelta(days=1)))
+
+    def test_data_de_hoje_vem_do_relogio(self):
+        with self.assertRaises(PeriodoInvalido) as ctx:
+            self.validador.validar(reserva(data=self.HOJE - timedelta(days=1)))
+        self.assertEqual(ctx.exception.campo, "data")
+
+    def test_editar_reserva_que_ja_saiu_sem_mudar_a_saida_e_aceito(self):
+        original = reserva(time(11), time(12), data=self.HOJE)
+        self.validador.validar(reserva(time(11), time(14), data=self.HOJE), original)
+
+    def test_mudar_a_saida_para_outro_horario_passado_e_rejeitado(self):
+        original = reserva(time(11), time(12), data=self.HOJE)
+        with self.assertRaises(PeriodoInvalido):
+            self.validador.validar(reserva(time(11, 30), time(12), data=self.HOJE), original)
 
 
 class CamposTest(unittest.TestCase):

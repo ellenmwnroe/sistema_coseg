@@ -68,11 +68,24 @@ class ValidadorCapacidade:
 
 
 class ValidadorPeriodo:
-    def __init__(self, hoje=date.today):
-        self._hoje = hoje
+    """Data não pode ser passada, retorno depois da saída e, para hoje, a saída
+    não pode ser num horário que já passou.
 
-    def validar(self, reserva):
-        if reserva.data < self._hoje():
+    `agora` devolve o datetime local (sem fuso) e liga a checagem do horário;
+    `hoje` sozinho (usado nos testes) só confere a data."""
+
+    def __init__(self, hoje=None, agora=None):
+        self._agora = agora
+        if hoje is not None:
+            self._hoje = hoje
+        elif agora is not None:
+            self._hoje = lambda: agora().date()
+        else:
+            self._hoje = date.today
+
+    def validar(self, reserva, original=None):
+        hoje = self._hoje()
+        if reserva.data < hoje:
             raise PeriodoInvalido(
                 "A data da reserva não pode estar no passado.", campo="data"
             )
@@ -80,6 +93,18 @@ class ValidadorPeriodo:
             raise PeriodoInvalido(
                 "O horário de retorno deve ser posterior ao de saída.",
                 campo="retorno",
+            )
+        if self._agora is None or reserva.data != hoje:
+            return
+        # Editar uma reserva que já saiu (ex.: esticar o retorno) continua permitido,
+        # desde que a data e a saída fiquem como estavam.
+        if original is not None and (original.data, original.saida) == (reserva.data, reserva.saida):
+            return
+        agora = self._agora().time().replace(second=0, microsecond=0)
+        if reserva.saida < agora:
+            raise PeriodoInvalido(
+                f"O horário de saída já passou. Para hoje, escolha a partir de {agora:%H:%M}.",
+                campo="saida",
             )
 
 

@@ -1,5 +1,7 @@
 from datetime import date, time
 
+from django.utils import timezone
+
 from core.domain.entidades import CategoriaVeiculo, Reserva
 from core.domain.excecoes import ReservaInvalida
 
@@ -22,7 +24,7 @@ def motorista_para_dict(motorista, hoje=None):
         "telefone": motorista.telefone,
         "cnh_categoria": motorista.categoria_cnh.value,
         "cnh_validade": motorista.validade_cnh.isoformat(),
-        "cnh_valida": motorista.cnh_valida_em(hoje or date.today()),
+        "cnh_valida": motorista.cnh_valida_em(hoje or timezone.localdate()),
         "dirige": [c.value for c in CategoriaVeiculo if motorista.pode_dirigir(c)],
         "ativo": motorista.ativo,
     }

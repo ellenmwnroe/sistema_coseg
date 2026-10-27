@@ -7,7 +7,7 @@
 // voltam no JSON com o "campo" e aparecem no lugar certo.
 import { api } from "../api.js";
 import { aviso, icone } from "../ui.js";
-import { NOME_CATEGORIA, dataExtenso, duracao, hojeISO, html } from "../util.js";
+import { NOME_CATEGORIA, agoraMinutos, dataExtenso, duracao, hojeISO, html, minutos, paraHHMM, somarDias } from "../util.js";
 
 const CAMPOS = ["solicitante", "setor", "atividade", "origem", "destino", "data", "saida", "retorno", "passageiros", "observacoes"];
 const OBRIGATORIOS = ["solicitante", "setor", "atividade", "origem", "destino", "data", "saida", "retorno"];
@@ -35,7 +35,7 @@ export async function render(main, rota) {
   const p = rota.params;
   const inicial = original || {
     solicitante: "", setor: "", atividade: "", origem: "Porto do Itaqui", destino: "",
-    data: p.get("data") || hojeISO(), saida: p.get("saida") || "08:00", retorno: p.get("retorno") || "10:00",
+    ...horarioSugerido(p),
     passageiros: 1, observacoes: "", veiculo: p.get("veiculo") || "",
   };
   const capacidadeDe = Object.fromEntries(veiculos.map((v) => [v.categoria, v.capacidade]));
@@ -279,6 +279,13 @@ export async function render(main, rota) {
     $("r-motorista-nota").textContent = r?.motoristas?.length
       ? `${r.motoristas.filter((m) => m.livre).length} motorista(s) com CNH ${exigida} livre(s) no horário` : "";
 
+    // Erros de data/horário que o servidor apontou aparecem também embaixo do campo.
+    for (const nome of ["data", "saida", "retorno"]) {
+      const erro = (r?.erros || []).find((e) => e.campo === nome);
+      $(`campo-${nome}`).classList.toggle("erro", Boolean(erro));
+      $(`erro-${nome}`).innerHTML = erro ? html`${icone.alerta}<span>${erro.erro}</span>`.texto : "";
+    }
+
     // Avisos: os erros vêm do servidor (mesmas regras que ele aplica ao gravar).
     const alertas = [];
     if (avisoTroca) alertas.push(["aviso", avisoTroca]);
@@ -398,6 +405,19 @@ export async function render(main, rota) {
   await consultar();
   if (!editando) main.addEventListener("tela-visivel", () => form.elements.solicitante.focus({ preventScroll: true }), { once: true });
   return () => clearTimeout(espera);
+}
+
+// Só um valor inicial para não abrir o formulário já com erro: hoje, a próxima
+// meia hora; tarde da noite, amanhã às 08:00. Quem valida o horário é o servidor.
+function horarioSugerido(p) {
+  if (p.get("saida")) {
+    return { data: p.get("data") || hojeISO(), saida: p.get("saida"), retorno: p.get("retorno") || paraHHMM(Math.min(minutos(p.get("saida")) + 60, 23 * 60 + 55)) };
+  }
+  const data = p.get("data") || hojeISO();
+  if (data !== hojeISO()) return { data, saida: "08:00", retorno: "10:00" };
+  const saida = Math.ceil((agoraMinutos() + 1) / 30) * 30;
+  if (saida > 22 * 60) return { data: somarDias(hojeISO(), 1), saida: "08:00", retorno: "10:00" };
+  return { data, saida: paraHHMM(saida), retorno: paraHHMM(Math.min(saida + 120, 23 * 60 + 55)) };
 }
 
 function campo(nome, rotulo, valor, opcoes = {}) {

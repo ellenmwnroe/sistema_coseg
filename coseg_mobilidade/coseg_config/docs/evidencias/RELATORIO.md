@@ -1,6 +1,6 @@
 # Evidências de teste da interface (PBL 2)
 
-Gerado por `python tests/e2e/evidencias.py` em 27/10/2026 02:06, num Chromium real, contra o Django com banco temporário e o seed do projeto.
+Gerado por `python tests/e2e/evidencias.py` em 27/10/2026 12:30, num Chromium real, contra o Django com banco temporário e o seed do projeto.
 
 | Grupo | Verificação | Resultado |
 |---|---|---|

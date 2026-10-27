@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field, replace
-from datetime import date
 
 from core.domain.entidades import Reserva, StatusReserva
 from core.domain.excecoes import (
@@ -49,14 +48,14 @@ def _faixa(reserva):
 
 
 class ReservaService:
-    def __init__(self, reservas, veiculos, hoje=date.today, motoristas=None):
+    def __init__(self, reservas, veiculos, hoje=None, motoristas=None, agora=None):
         self._reservas = reservas
         self._veiculos = veiculos
         self._motoristas = motoristas
         self._motorista = ValidadorMotorista()
         self._campos = ValidadorCampos()
         self._capacidade = ValidadorCapacidade()
-        self._periodo = ValidadorPeriodo(hoje)
+        self._periodo = ValidadorPeriodo(hoje=hoje, agora=agora)
         self._conflito = ValidadorConflito()
 
     def frota(self):
@@ -87,7 +86,7 @@ class ReservaService:
         atual = self._obter_confirmada(reserva_id)
         reserva.id = reserva_id
         reserva.status = atual.status
-        self._preparar(reserva, codigo_veiculo, codigo_motorista, preferido=atual.motorista)
+        self._preparar(reserva, codigo_veiculo, codigo_motorista, preferido=atual.motorista, original=atual)
         return self._reservas.salvar(reserva)
 
     def cancelar(self, reserva_id):
@@ -108,14 +107,14 @@ class ReservaService:
             raise ReservaNaoEditavel(reserva_id, reserva.status)
         return reserva
 
-    def _preparar(self, reserva, codigo_veiculo, codigo_motorista=None, preferido=None):
+    def _preparar(self, reserva, codigo_veiculo, codigo_motorista=None, preferido=None, original=None):
         if codigo_veiculo:
             reserva.veiculo = self._buscar_veiculo(codigo_veiculo)
         if codigo_motorista:
             reserva.motorista = self._buscar_motorista(codigo_motorista)
         self._campos.validar(reserva)
         self._capacidade.validar(reserva)
-        self._periodo.validar(reserva)
+        self._periodo.validar(reserva, original)
         if reserva.veiculo is None:
             reserva.veiculo = self._alocar(reserva)
         else:
@@ -224,8 +223,9 @@ class ReservaService:
             categoria=alvo, id=ignorar_id,
         )
         periodo_ok = True
+        original = self._reservas.obter(ignorar_id) if ignorar_id else None
         try:
-            self._periodo.validar(tentativa)
+            self._periodo.validar(tentativa, original)
         except ReservaInvalida as exc:
             resultado.erros.append(exc)
             periodo_ok = tentativa.retorno > tentativa.saida  # data passada ainda mostra a agenda

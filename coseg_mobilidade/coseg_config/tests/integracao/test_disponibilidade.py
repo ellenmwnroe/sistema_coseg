@@ -5,10 +5,11 @@ from datetime import date, timedelta
 from django.core.management import call_command
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from adapters.saida.persistencia.models import ReservaModel
 
-AMANHA = (date.today() + timedelta(days=1)).isoformat()
+AMANHA = (timezone.localdate() + timedelta(days=1)).isoformat()
 
 
 class DisponibilidadeTest(TestCase):
@@ -73,7 +74,7 @@ class DisponibilidadeTest(TestCase):
         self.assertIsNone(corpo["veiculo"])
 
     def test_data_passada(self):
-        ontem = (date.today() - timedelta(days=1)).isoformat()
+        ontem = (timezone.localdate() - timedelta(days=1)).isoformat()
         corpo = self.consultar(data=ontem).json()
         self.assertIn("PERIODO_INVALIDO", [e["codigo"] for e in corpo["erros"]])
 

@@ -9,7 +9,11 @@ from django.views.decorators.http import require_GET, require_http_methods
 from core.domain.excecoes import (
     CamposObrigatorios,
     CapacidadeExcedida,
+    CnhVencida,
     ConflitoDeHorario,
+    ConflitoDeMotorista,
+    MotoristaInativo,
+    MotoristaNaoHabilitado,
     PeriodoInvalido,
     ReservaInvalida,
     ReservaNaoEditavel,
@@ -21,6 +25,7 @@ from core.domain.excecoes import (
 from .composicao import montar_cadastro, montar_service
 from .serializacao import (
     ler_data,
+    motorista_para_dict,
     reserva_do_payload,
     reserva_para_dict,
     veiculo_para_dict,
@@ -29,6 +34,10 @@ from .serializacao import (
 # Subclasses antes da base: a primeira correspondência vence.
 ERROS_DE_DOMINIO = [
     (ConflitoDeHorario, 409, "CONFLITO_DE_HORARIO"),
+    (ConflitoDeMotorista, 409, "CONFLITO_DE_MOTORISTA"),
+    (MotoristaNaoHabilitado, 400, "MOTORISTA_NAO_HABILITADO"),
+    (CnhVencida, 400, "CNH_VENCIDA"),
+    (MotoristaInativo, 400, "MOTORISTA_INATIVO"),
     (SemVeiculoDisponivel, 409, "SEM_VEICULO_DISPONIVEL"),
     (ReservaNaoEditavel, 409, "RESERVA_NAO_EDITAVEL"),
     (VeiculoInativo, 400, "VEICULO_INATIVO"),
@@ -47,7 +56,7 @@ def _erro(status, codigo, mensagem, **extra):
 def _detalhes(exc):
     if isinstance(exc, CamposObrigatorios):
         return {"campos": exc.campos}
-    if isinstance(exc, ConflitoDeHorario):
+    if isinstance(exc, (ConflitoDeHorario, ConflitoDeMotorista)):
         existente = exc.reserva_existente
         return {
             "conflito": {
@@ -56,6 +65,7 @@ def _detalhes(exc):
                 "data": existente.data.isoformat(),
                 "saida": existente.saida.strftime("%H:%M"),
                 "retorno": existente.retorno.strftime("%H:%M"),
+                "motorista": existente.motorista.matricula if existente.motorista else None,
             }
         }
     return {}
@@ -104,6 +114,13 @@ def veiculos(request):
 
 @api
 @require_GET
+def motoristas(request):
+    lista = [motorista_para_dict(m) for m in montar_service().motoristas()]
+    return JsonResponse({"sucesso": True, "total": len(lista), "motoristas": lista})
+
+
+@api
+@require_GET
 def colaboradores(request):
     cadastro = montar_cadastro()
     lista = [
@@ -140,9 +157,9 @@ def reservas(request):
             }
         )
 
-    reserva, codigo_veiculo = reserva_do_payload(_corpo_json(request))
+    reserva, codigo_veiculo, codigo_motorista = reserva_do_payload(_corpo_json(request))
     with transaction.atomic():
-        criada = service.criar(reserva, codigo_veiculo)
+        criada = service.criar(reserva, codigo_veiculo, codigo_motorista)
     return _sucesso("Reserva registrada com sucesso.", criada, status=201)
 
 
@@ -162,9 +179,9 @@ def reserva_detalhe(request, reserva_id):
             {"sucesso": True, "mensagem": f"Reserva {reserva_id} cancelada com sucesso."}
         )
 
-    reserva, codigo_veiculo = reserva_do_payload(_corpo_json(request))
+    reserva, codigo_veiculo, codigo_motorista = reserva_do_payload(_corpo_json(request))
     with transaction.atomic():
-        atualizada = service.atualizar(reserva_id, reserva, codigo_veiculo)
+        atualizada = service.atualizar(reserva_id, reserva, codigo_veiculo, codigo_motorista)
     return _sucesso("Reserva atualizada com sucesso.", atualizada)
 
 

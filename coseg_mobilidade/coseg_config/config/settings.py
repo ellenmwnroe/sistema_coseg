@@ -60,20 +60,25 @@ TEMPLATES = [
 ]
 
 if os.environ.get("DATABASE_URL"):
-    # Produção (Vercel + Postgres/Neon): a Vercel preenche DATABASE_URL sozinha
-    # quando o banco é conectado ao projeto.
+    # Produção: qualquer Postgres pela URL — Neon (pela Vercel) ou Supabase.
     url = urllib.parse.urlparse(os.environ["DATABASE_URL"])
     opcoes = dict(urllib.parse.parse_qsl(url.query))
+    porta = url.port or 5432
+    # Supabase "Transaction pooler" (porta 6543): cada consulta pode cair numa conexão
+    # diferente do pool, então nada de conexão persistente nem cursor no servidor.
+    # (O Django já usa binding no cliente com psycopg 3, sem prepared statements.)
+    pooler_de_transacao = porta == 6543 or opcoes.get("pgbouncer") == "true"
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.postgresql",
-            "NAME": url.path.lstrip("/"),
+            "NAME": url.path.lstrip("/") or "postgres",
             "USER": urllib.parse.unquote(url.username or ""),
             "PASSWORD": urllib.parse.unquote(url.password or ""),
             "HOST": url.hostname,
-            "PORT": url.port or 5432,
+            "PORT": porta,
             "OPTIONS": {"sslmode": opcoes.get("sslmode", "require")},
-            "CONN_MAX_AGE": 60,
+            "CONN_MAX_AGE": 0 if pooler_de_transacao else 60,
+            "DISABLE_SERVER_SIDE_CURSORS": pooler_de_transacao,
         }
     }
 else:

@@ -7,7 +7,7 @@ import { api } from "../api.js";
 import { aviso, icone } from "../ui.js";
 import {
   CAPACIDADE, NOME_CATEGORIA, categoriaMinima, conflita, dataExtenso, duracao,
-  hojeISO, html, minutos,
+  hojeISO, html, minutos, situacaoMotorista,
 } from "../util.js";
 
 const CAMPOS = ["solicitante", "setor", "atividade", "origem", "destino", "data", "saida", "retorno", "passageiros", "observacoes"];
@@ -16,8 +16,9 @@ const CAMPO_DA_TELA = { categoria: "veiculo", "veiculo ou categoria": "veiculo",
 
 export async function render(main, rota) {
   const editando = rota.nome === "editar";
-  const [veiculos, cadastro, original] = await Promise.all([
+  const [veiculos, motoristas, cadastro, original] = await Promise.all([
     api.veiculos(),
+    api.motoristas().catch(() => []),
     api.colaboradores().catch(() => ({ colaboradores: [], setores: [] })),
     editando ? api.reserva(rota.id) : null,
   ]);
@@ -36,7 +37,7 @@ export async function render(main, rota) {
   const inicial = original || {
     solicitante: "", setor: "", atividade: "", origem: "Porto do Itaqui", destino: "",
     data: p.get("data") || hojeISO(), saida: p.get("saida") || "08:00", retorno: p.get("retorno") || "10:00",
-    passageiros: 1, observacoes: "", veiculo: p.get("veiculo") || "",
+    passageiros: 1, observacoes: "", veiculo: p.get("veiculo") || "", motorista: p.get("motorista") || "",
   };
   const cache = new Map(); // data -> reservas daquele dia
 
@@ -99,11 +100,16 @@ export async function render(main, rota) {
           </div>
 
           <div class="card secao">
-            <div class="secao-cabeca"><span class="secao-num">05</span><h2 class="secao-titulo">Veículo</h2></div>
+            <div class="secao-cabeca"><span class="secao-num">05</span><h2 class="secao-titulo">Veículo e motorista</h2></div>
             <fieldset class="campo" id="campo-veiculo" style="border:0;padding:0;margin:0">
-              <legend class="sr">Escolha o veículo</legend>
+              <legend class="rotulo" style="margin-bottom:8px">Veículo</legend>
               <div class="escolhas" id="escolhas"></div>
               <p class="msg-erro" id="erro-veiculo"></p>
+            </fieldset>
+            <fieldset class="campo" id="campo-motorista" style="border:0;padding:0;margin:0">
+              <legend class="rotulo" style="margin-bottom:8px">Motorista</legend>
+              <div class="escolhas escolhas-motorista" id="escolhas-motorista"></div>
+              <p class="msg-erro" id="erro-motorista"></p>
             </fieldset>
             ${campo("observacoes", "Observações (opcional)", inicial.observacoes, { textarea: true, placeholder: "Ex.: levar EPI, motorista precisa de crachá" })}
           </div>
@@ -130,6 +136,11 @@ export async function render(main, rota) {
             <span class="resumo-rotulo">Veículo</span>
             <span class="resumo-valor" id="r-veiculo"></span>
           </div>
+          <div class="resumo-bloco">
+            <span class="resumo-rotulo">Motorista</span>
+            <span class="resumo-valor" id="r-motorista"></span>
+            <span class="resumo-nota" id="r-motorista-nota"></span>
+          </div>
           <div id="r-alertas" class="secao" style="gap:10px"></div>
           <button class="botao botao-menta botao-grande" type="submit" id="enviar">
             ${icone.check} ${editando ? "Salvar alterações" : "Confirmar reserva"}
@@ -143,6 +154,7 @@ export async function render(main, rota) {
   const $ = (id) => form.querySelector(`#${id}`);
   const valor = (nome) => (form.elements[nome]?.value ?? "").trim();
   let escolhido = inicial.veiculo || "";
+  let motoristaEscolhido = inicial.motorista || "";
 
   // ---------------------------------------------------------- leitura ---
   const passageiros = () => Number($("passageiros").value) || 0;
@@ -231,9 +243,43 @@ export async function render(main, rota) {
       ? escolhido
       : primeiroLivre ? `Automático → ${primeiroLivre.v.codigo}` : "Nenhum disponível";
 
+    // Motoristas: a categoria vem do veículo escolhido (ou da escolha automática).
+    const categoriaDoVeiculo = escolhido
+      ? veiculos.find((v) => v.codigo === escolhido)?.categoria
+      : primeiroLivre?.v.categoria || categoria;
+    const doDia = await reservasDoDia(data);
+    const situMotoristas = motoristas.map((m) => ({
+      m,
+      ...situacaoMotorista(m, { categoria: categoriaDoVeiculo, data, saida, retorno, doDia, ignorarId: original?.id }),
+    }));
+    let avisoMotorista = "";
+    const atualMotorista = situMotoristas.find((s) => s.m.matricula === motoristaEscolhido);
+    if (motoristaEscolhido && atualMotorista && !atualMotorista.livre) {
+      avisoMotorista = `${atualMotorista.m.nome} não pode ser escalado(a) (${atualMotorista.motivo.toLowerCase()}). Ficou "a definir".`;
+      motoristaEscolhido = "";
+    }
+    $("escolhas-motorista").innerHTML = html`
+      <div class="escolha escolha-auto">
+        <input type="radio" name="motorista" id="m-nenhum" value="" ${motoristaEscolhido ? "" : "checked"}>
+        <label for="m-nenhum"><strong>A definir</strong><small>escalar depois</small></label>
+      </div>
+      ${situMotoristas.map((s) => html`
+        <div class="escolha">
+          <input type="radio" name="motorista" id="m-${s.m.matricula}" value="${s.m.matricula}"
+                 ${motoristaEscolhido === s.m.matricula ? "checked" : ""} ${s.livre ? "" : "disabled"}>
+          <label for="m-${s.m.matricula}"><strong class="nome-pessoa">${s.m.nome}</strong><small>CNH ${s.m.cnh_categoria} · ${s.motivo}</small></label>
+        </div>`)}`.texto;
+    const escalado = situMotoristas.find((s) => s.m.matricula === motoristaEscolhido)?.m;
+    const livresMotoristas = situMotoristas.filter((s) => s.livre).length;
+    $("r-motorista").textContent = escalado ? escalado.nome : "A definir";
+    $("r-motorista-nota").textContent = escalado
+      ? `CNH ${escalado.cnh_categoria}${escalado.telefone ? ` · ${escalado.telefone}` : ""}`
+      : `${livresMotoristas} motorista(s) habilitado(s) e livre(s) para ${categoriaDoVeiculo || "o veículo"}`;
+
     // Alertas antecipados (o servidor confirma ao enviar)
     const alertas = [];
     if (avisoTroca) alertas.push(["aviso", avisoTroca]);
+    if (avisoMotorista) alertas.push(["aviso", avisoMotorista]);
     if (data && data < hojeISO()) alertas.push(["erro", "A data está no passado."]);
     if (saida && retorno && minutos(retorno) <= minutos(saida)) alertas.push(["erro", "O retorno precisa ser depois da saída."]);
     if (!categoria) alertas.push(["erro", "Grupos acima de 18 pessoas não podem ser atendidos pela frota."]);
@@ -273,6 +319,7 @@ export async function render(main, rota) {
     dados.passageiros = passageiros();
     if (escolhido) dados.veiculo = escolhido;
     else dados.categoria = categoriaMinima(dados.passageiros) || "VC";
+    if (motoristaEscolhido) dados.motorista = motoristaEscolhido;
 
     const botao = $("enviar");
     botao.disabled = true;
@@ -297,6 +344,7 @@ export async function render(main, rota) {
       if (erro.status === 409) {
         // A agenda mudou (alguém reservou antes): recarrega a disponibilidade.
         cache.delete(dados.data);
+        if (corpo.codigo === "CONFLITO_DE_MOTORISTA") motoristaEscolhido = "";
         await atualizar();
       }
       primeiro?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -309,7 +357,7 @@ export async function render(main, rota) {
 
   // ---------------------------------------------------------- eventos ---
   form.addEventListener("input", (e) => {
-    if (e.target.name === "veiculo") return;
+    if (e.target.name === "veiculo" || e.target.name === "motorista") return;
     e.target.closest(".campo")?.classList.remove("erro");
     if (e.target.name === "solicitante") {
       // Nome conhecido: completa o setor sozinho.
@@ -323,6 +371,12 @@ export async function render(main, rota) {
       escolhido = e.target.value;
       $("campo-veiculo").classList.remove("erro");
       $("erro-veiculo").innerHTML = "";
+      atualizar();
+    }
+    if (e.target.name === "motorista") {
+      motoristaEscolhido = e.target.value;
+      $("campo-motorista").classList.remove("erro");
+      $("erro-motorista").innerHTML = "";
       atualizar();
     }
   });

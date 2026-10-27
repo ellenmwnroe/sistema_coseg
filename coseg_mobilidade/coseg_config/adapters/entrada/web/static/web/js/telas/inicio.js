@@ -82,7 +82,7 @@ export async function render(main) {
                   <span class="item-hora">${r.veiculo}</span>
                   <span class="item-corpo">
                     <span class="item-titulo">${r.atividade}</span>
-                    <span class="item-sub">${r.solicitante} · ${r.destino}</span>
+                    <span class="item-sub">${r.motorista_nome ? `${r.motorista_nome} ao volante` : r.solicitante} · ${r.destino}</span>
                     <span class="progresso" aria-label="${feito}% do horário reservado"><span style="width:${feito}%"></span></span>
                   </span>
                   <span class="mono" style="font-size:14px">volta ${r.retorno}</span>

@@ -1,5 +1,6 @@
-// Agenda: linha do tempo do dia, uma faixa por veículo.
-// Clicar num espaço vazio abre uma reserva já preenchida com veículo e horário.
+// Agenda: linha do tempo do dia, uma faixa por veículo ou por motorista.
+// Clicar num espaço vazio abre uma reserva já preenchida com o veículo (ou o
+// motorista) e o horário clicado.
 import { api } from "../api.js";
 import { abrirDetalhe, aviso, icone, recarregar } from "../ui.js";
 import {
@@ -8,13 +9,30 @@ import {
 } from "../util.js";
 
 const PASSO = 30;     // encaixe do clique na grade, em minutos
+const PISTA = 34;     // altura de cada pista quando há blocos que se cruzam
+
+/** Distribui em pistas os blocos que se sobrepõem na mesma faixa
+ *  (ex.: "A definir", ou canceladas visíveis junto das confirmadas). */
+function pistas(reservas) {
+  const fins = [];
+  const pistaDe = new Map();
+  for (const r of [...reservas].sort((a, b) => minutos(a.saida) - minutos(b.saida))) {
+    let i = fins.findIndex((fim) => fim <= minutos(r.saida));
+    if (i === -1) { i = fins.length; fins.push(0); }
+    fins[i] = minutos(r.retorno);
+    pistaDe.set(r.id, i);
+  }
+  return { pistaDe, total: Math.max(1, fins.length) };
+}
 const DURACAO = 60;   // duração sugerida para uma reserva nova
 
 export async function render(main, rota) {
-  const veiculos = await api.veiculos();
+  const [veiculos, motoristas] = await Promise.all([api.veiculos(), api.motoristas().catch(() => [])]);
+  const categoriaDo = new Map(veiculos.map((v) => [v.codigo, v.categoria]));
   const estado = {
     data: rota.params.get("data") || hojeISO(),
     canceladas: rota.params.get("canceladas") === "1",
+    modo: rota.params.get("modo") === "motoristas" ? "motoristas" : "veiculos",
     reservas: [],
   };
 
@@ -36,7 +54,11 @@ export async function render(main, rota) {
       </div>
 
       <div class="card" style="padding:0">
-        <div style="display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:22px 24px 6px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;padding:22px 24px 6px">
+          <div class="segmentos" role="group" aria-label="Ver a agenda por">
+            <button type="button" data-modo="veiculos">Por veículo</button>
+            <button type="button" data-modo="motoristas">Por motorista</button>
+          </div>
           <div class="legenda" aria-label="Legenda">
             <span><i style="background:var(--tinta)"></i>Leve (VL)</span>
             <span><i style="background:var(--verde)"></i>Coletivo (VC)</span>
@@ -47,17 +69,23 @@ export async function render(main, rota) {
         </div>
         <div class="agenda" id="agenda-grade"></div>
       </div>
-      <p class="dica">${icone.info} Clique num espaço vazio da linha do tempo para reservar aquele veículo naquele horário. Clique numa reserva para ver detalhes, editar ou cancelar.</p>
+      <p class="dica" id="agenda-dica"></p>
     </section>`.texto;
 
   const grade = main.querySelector("#agenda-grade");
   const campoData = main.querySelector("#agenda-data");
   const campoCanceladas = main.querySelector("#agenda-canceladas");
 
+  const salvarUrl = () => trocarParams("agenda", {
+    data: estado.data,
+    ...(estado.modo === "motoristas" ? { modo: "motoristas" } : {}),
+    ...(estado.canceladas ? { canceladas: "1" } : {}),
+  });
+
   async function carregar() {
     campoData.value = estado.data;
     campoCanceladas.checked = estado.canceladas;
-    trocarParams("agenda", { data: estado.data, ...(estado.canceladas ? { canceladas: "1" } : {}) });
+    salvarUrl();
     main.querySelector("#agenda-titulo").textContent = rotuloDia(estado.data) === dataExtenso(estado.data)
       ? dataExtenso(estado.data) : `${rotuloDia(estado.data)}, ${dataExtenso(estado.data).split(", ")[1]}`;
     grade.setAttribute("aria-busy", "true");
@@ -86,12 +114,69 @@ export async function render(main, rota) {
     grade.scrollLeft = Math.max(0, x - grade.clientWidth / 2);
   }
 
+  // Cada faixa da agenda: um veículo ou um motorista.
+  function faixas(visiveis) {
+    if (estado.modo === "veiculos") {
+      return veiculos.map((v) => ({
+        tipo: "veiculo",
+        chave: v.codigo,
+        titulo: v.codigo,
+        mono: true,
+        pilula: v.categoria,
+        pilulaClasse: v.categoria === "VC" ? "pilula-verde" : "pilula-cinza",
+        sub: v.ativo ? `${v.capacidade} lugares${v.placa ? ` · ${v.placa}` : ""}` : "Inativo",
+        disponivel: v.ativo,
+        motivo: `${v.codigo} está inativo e não pode ser reservado.`,
+        reservas: visiveis.filter((r) => r.veiculo === v.codigo),
+      }));
+    }
+    const linhas = motoristas.map((m) => {
+      const cnhOk = m.cnh_validade >= estado.data;
+      return {
+        tipo: "motorista",
+        chave: m.matricula,
+        titulo: m.nome,
+        mono: false,
+        pilula: `CNH ${m.cnh_categoria}`,
+        pilulaClasse: m.dirige.includes("VC") ? "pilula-verde" : "pilula-cinza",
+        sub: !m.ativo ? "Inativo" : cnhOk ? `Dirige ${m.dirige.join(" e ")}` : "CNH vencida nesta data",
+        disponivel: m.ativo && cnhOk,
+        motivo: `${m.nome} não pode ser escalado(a) nesta data (${m.ativo ? "CNH vencida" : "inativo"}).`,
+        reservas: visiveis.filter((r) => r.motorista === m.matricula),
+      };
+    });
+    // Faixa extra com o que ainda precisa de motorista.
+    linhas.push({
+      tipo: "sem-motorista",
+      chave: "",
+      titulo: "A definir",
+      mono: false,
+      pilula: "sem motorista",
+      pilulaClasse: "pilula-contorno",
+      sub: "Reservas para escalar",
+      disponivel: false,
+      motivo: "",
+      reservas: visiveis.filter((r) => !r.motorista),
+    });
+    return linhas;
+  }
+
   function desenhar() {
+    main.querySelectorAll("[data-modo]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.modo === estado.modo));
     const visiveis = estado.reservas.filter((r) => estado.canceladas || r.status !== "CANCELADA");
     const ativas = estado.reservas.filter((r) => r.status !== "CANCELADA");
-    const emUso = new Set(ativas.map((r) => r.veiculo)).size;
-    main.querySelector("#agenda-resumo").textContent =
-      `${ativas.length === 1 ? "1 reserva" : `${ativas.length} reservas`} · ${emUso} de ${veiculos.length} veículos com saída no dia`;
+    const qtd = ativas.length === 1 ? "1 reserva" : `${ativas.length} reservas`;
+    if (estado.modo === "veiculos") {
+      const emUso = new Set(ativas.map((r) => r.veiculo)).size;
+      main.querySelector("#agenda-resumo").textContent = `${qtd} · ${emUso} de ${veiculos.length} veículos com saída no dia`;
+      main.querySelector("#agenda-dica").innerHTML = html`${icone.info} Clique num espaço vazio para reservar aquele veículo naquele horário. Clique numa reserva para ver detalhes, editar ou cancelar.`.texto;
+    } else {
+      const escalados = new Set(ativas.filter((r) => r.motorista).map((r) => r.motorista)).size;
+      const semMotorista = ativas.filter((r) => !r.motorista).length;
+      main.querySelector("#agenda-resumo").textContent =
+        `${qtd} · ${escalados} motorista(s) escalado(s) · ${semMotorista} sem motorista`;
+      main.querySelector("#agenda-dica").innerHTML = html`${icone.info} Clique num espaço vazio na faixa de um motorista para criar uma reserva já com ele(a) escalado(a). A faixa “A definir” mostra o que ainda precisa de motorista.`.texto;
+    }
 
     // Janela padrão 06h–22h, alargada se houver reserva fora dela.
     let inicio = 6 * 60;
@@ -107,6 +192,7 @@ export async function render(main, rota) {
 
     const agora = agoraMinutos();
     const mostrarAgora = estado.data === hojeISO() && agora >= inicio && agora <= fim;
+    const porMotorista = estado.modo === "motoristas";
 
     grade.innerHTML = html`
       <div class="agenda-interna" style="--passo-hora: calc(100% / ${horas})">
@@ -117,33 +203,38 @@ export async function render(main, rota) {
               <span class="agenda-hora" style="left:${(i / horas) * 100}%">${paraHHMM(inicio + i * 60).slice(0, 2)}h</span>`)}
           </div>
         </div>
-        ${veiculos.map((v) => {
-          const doVeiculo = visiveis.filter((r) => r.veiculo === v.codigo);
+        ${faixas(visiveis).map((f) => {
+          const { pistaDe, total: nPistas } = pistas(f.reservas);
+          const empilhado = nPistas > 1;
           return html`
-            <div class="agenda-linha">
-              <div class="agenda-veiculo">
-                <strong>${v.codigo}
-                  <span class="pilula pilula-pequena ${v.categoria === "VC" ? "pilula-verde" : "pilula-cinza"}">${v.categoria}</span>
-                </strong>
-                <small>${v.ativo ? `${v.capacidade} lugares${v.placa ? ` · ${v.placa}` : ""}` : "Inativo"}</small>
-              </div>
-              <div class="agenda-trilho ${v.ativo ? "" : "inativo"}" data-veiculo="${v.codigo}" data-ativo="${v.ativo ? "1" : "0"}"
-                   role="group" aria-label="${v.codigo}: ${doVeiculo.length} reserva(s)">
-                ${doVeiculo.map((r) => {
-                  // Bloco curto mostra menos texto; o detalhe completo fica no title e no clique.
-                  const dur = minutos(r.retorno) - minutos(r.saida);
-                  const rotulo = dur >= 120 ? `${r.saida}–${r.retorno}` : r.saida;
-                  return html`
-                  <button class="bloco ${v.categoria === "VC" ? "vc" : ""} ${r.status.toLowerCase()}"
-                          style="left:${pos(minutos(r.saida))};width:${larg(minutos(r.saida), minutos(r.retorno))}"
-                          data-reserva="${r.id}" title="${r.saida}–${r.retorno} · ${r.atividade} · ${r.solicitante}"
-                          aria-label="${r.saida} a ${r.retorno}, ${r.atividade}, ${r.solicitante}, ${STATUS[r.status]}">
-                    ${dur >= 60 ? html`<b>${rotulo}</b>` : ""}
-                    ${dur >= 60 ? html`<span>${r.atividade} · ${r.solicitante}</span>` : ""}
-                  </button>`;
-                })}
-              </div>
-            </div>`;
+          <div class="agenda-linha">
+            <div class="agenda-veiculo">
+              <strong class="${f.mono ? "" : "nome-pessoa"}">${f.titulo}
+                <span class="pilula pilula-pequena ${f.pilulaClasse}">${f.pilula}</span>
+              </strong>
+              <small>${f.sub}</small>
+            </div>
+            <div class="agenda-trilho ${f.disponivel ? "" : f.tipo === "sem-motorista" ? "sem-motorista" : "inativo"}"
+                 data-tipo="${f.tipo}" data-chave="${f.chave}" data-ativo="${f.disponivel ? "1" : "0"}"
+                 data-motivo="${f.motivo}" role="group" aria-label="${f.titulo}: ${f.reservas.length} reserva(s)"
+                 style="${empilhado ? `height:${nPistas * PISTA + 12}px` : ""}">
+              ${f.reservas.map((r) => {
+                // Bloco curto mostra menos texto; o detalhe completo fica no title e no clique.
+                const dur = minutos(r.retorno) - minutos(r.saida);
+                const rotulo = dur >= 120 ? `${r.saida}–${r.retorno}` : r.saida;
+                const texto = porMotorista ? `${r.veiculo} · ${r.atividade}` : `${r.atividade} · ${r.motorista_nome || r.solicitante}`;
+                return html`
+                <button class="bloco ${categoriaDo.get(r.veiculo) === "VC" ? "vc" : ""} ${r.status.toLowerCase()} ${empilhado ? "compacto" : ""}"
+                        style="left:${pos(minutos(r.saida))};width:${larg(minutos(r.saida), minutos(r.retorno))}${empilhado ? `;top:${6 + pistaDe.get(r.id) * PISTA}px;bottom:auto;height:${PISTA - 4}px` : ""}"
+                        data-reserva="${r.id}"
+                        title="${r.saida}–${r.retorno} · ${r.veiculo} · ${r.atividade} · motorista: ${r.motorista_nome || "a definir"}"
+                        aria-label="${r.saida} a ${r.retorno}, ${r.veiculo}, ${r.atividade}, motorista ${r.motorista_nome || "a definir"}, ${STATUS[r.status]}">
+                  ${dur >= 60 ? html`<b>${rotulo}</b>` : ""}
+                  ${dur >= 60 ? html`<span>${texto}</span>` : ""}
+                </button>`;
+              })}
+            </div>
+          </div>`;
         })}
         ${mostrarAgora ? html`
           <span class="agenda-agora" aria-hidden="true"
@@ -169,7 +260,7 @@ export async function render(main, rota) {
   // Bloco fantasma que acompanha o mouse mostrando o horário que será reservado.
   let fantasma = null;
   function mostrarFantasma(e) {
-    const trilho = e.target.closest(".agenda-trilho[data-veiculo]");
+    const trilho = e.target.closest(".agenda-trilho[data-tipo]");
     if (!trilho || trilho.dataset.ativo === "0" || e.target.closest(".bloco")) {
       fantasma?.remove();
       fantasma = null;
@@ -195,17 +286,25 @@ export async function render(main, rota) {
       abrirDetalhe(reserva, recarregar);
       return;
     }
-    const trilho = e.target.closest(".agenda-trilho[data-veiculo]");
+    const trilho = e.target.closest(".agenda-trilho[data-tipo]");
     if (trilho) {
+      if (trilho.dataset.tipo === "sem-motorista") return;
       if (trilho.dataset.ativo === "0") {
-        aviso(`${trilho.dataset.veiculo} está inativo e não pode ser reservado.`, "erro");
+        aviso(trilho.dataset.motivo, "erro");
         return;
       }
       const { saida, retorno } = horarioNoPonto(trilho, e.clientX);
       const params = new URLSearchParams({
-        veiculo: trilho.dataset.veiculo, data: estado.data, saida: paraHHMM(saida), retorno: paraHHMM(retorno),
+        [trilho.dataset.tipo]: trilho.dataset.chave, data: estado.data, saida: paraHHMM(saida), retorno: paraHHMM(retorno),
       });
       location.hash = `#/nova?${params}`;
+      return;
+    }
+    const modo = e.target.closest("[data-modo]")?.dataset.modo;
+    if (modo) {
+      estado.modo = modo;
+      salvarUrl();
+      desenhar();
       return;
     }
     const ir = e.target.closest("[data-ir]")?.dataset.ir;
@@ -220,7 +319,7 @@ export async function render(main, rota) {
   });
   campoCanceladas.addEventListener("change", () => {
     estado.canceladas = campoCanceladas.checked;
-    trocarParams("agenda", { data: estado.data, ...(estado.canceladas ? { canceladas: "1" } : {}) });
+    salvarUrl();
     desenhar();
   });
   main.addEventListener("click", aoClicar);

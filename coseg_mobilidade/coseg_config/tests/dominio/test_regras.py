@@ -1,7 +1,14 @@
 import unittest
 from datetime import date, time, timedelta
 
-from core.domain.entidades import CategoriaVeiculo, Reserva, StatusReserva, Veiculo
+from core.domain.entidades import (
+    CategoriaCnh,
+    CategoriaVeiculo,
+    Motorista,
+    Reserva,
+    StatusReserva,
+    Veiculo,
+)
 from core.domain.excecoes import (
     CamposObrigatorios,
     CapacidadeExcedida,
@@ -12,8 +19,15 @@ from core.domain.validadores import (
     ValidadorCampos,
     ValidadorCapacidade,
     ValidadorConflito,
+    ValidadorMotorista,
     ValidadorPeriodo,
     categoria_minima,
+)
+from core.domain.excecoes import (
+    CnhVencida,
+    ConflitoDeMotorista,
+    MotoristaInativo,
+    MotoristaNaoHabilitado,
 )
 
 VL01 = Veiculo("VL-01", CategoriaVeiculo.LEVE)
@@ -168,6 +182,63 @@ class CamposTest(unittest.TestCase):
             self.validador.validar(reserva(passageiros=0))
         self.assertEqual(ctx.exception.campo, "passageiros")
 
+
+
+ANA_B = Motorista("MOT-1", "Ana", CategoriaCnh.B, AMANHA + timedelta(days=365))
+JOAO_D = Motorista("MOT-2", "João", CategoriaCnh.D, AMANHA + timedelta(days=365))
+
+
+class MotoristaTest(unittest.TestCase):
+    def setUp(self):
+        self.validador = ValidadorMotorista()
+
+    def test_sem_motorista_nao_valida_nada(self):
+        self.validador.validar(reserva(), [])
+
+    def test_categoria_b_dirige_leve(self):
+        self.validador.validar(reserva(motorista=ANA_B), [])
+
+    def test_categoria_b_nao_dirige_coletivo(self):
+        with self.assertRaises(MotoristaNaoHabilitado) as ctx:
+            self.validador.validar(reserva(veiculo=VC01, motorista=ANA_B), [])
+        self.assertIn("D ou E", ctx.exception.mensagem)
+
+    def test_categorias_d_e_e_dirigem_coletivo(self):
+        self.validador.validar(reserva(veiculo=VC01, motorista=JOAO_D), [])
+        carlos = Motorista("MOT-3", "Carlos", CategoriaCnh.E, AMANHA)
+        self.validador.validar(reserva(veiculo=VC01, motorista=carlos), [])
+
+    def test_cnh_vencida_na_data_da_reserva(self):
+        vencida = Motorista("MOT-4", "Bia", CategoriaCnh.B, AMANHA - timedelta(days=1))
+        with self.assertRaises(CnhVencida):
+            self.validador.validar(reserva(motorista=vencida), [])
+
+    def test_cnh_vence_no_proprio_dia_ainda_vale(self):
+        no_limite = Motorista("MOT-5", "Edu", CategoriaCnh.B, AMANHA)
+        self.validador.validar(reserva(motorista=no_limite), [])
+
+    def test_motorista_inativo(self):
+        inativo = Motorista("MOT-6", "Gil", CategoriaCnh.D, AMANHA, ativo=False)
+        with self.assertRaises(MotoristaInativo):
+            self.validador.validar(reserva(motorista=inativo), [])
+
+    def test_motorista_em_dois_lugares_ao_mesmo_tempo(self):
+        existente = reserva(time(8), time(10), veiculo=VL02, motorista=ANA_B, id=1)
+        with self.assertRaises(ConflitoDeMotorista) as ctx:
+            self.validador.validar(reserva(time(9), time(11), motorista=ANA_B), [existente])
+        self.assertIn("Ana", ctx.exception.mensagem)
+
+    def test_motorista_livre_depois_do_retorno(self):
+        existente = reserva(time(8), time(10), veiculo=VL02, motorista=ANA_B, id=1)
+        self.validador.validar(reserva(time(10), time(12), motorista=ANA_B), [existente])
+
+    def test_reserva_cancelada_libera_o_motorista(self):
+        cancelada = reserva(time(8), time(10), motorista=ANA_B, id=1, status=StatusReserva.CANCELADA)
+        self.validador.validar(reserva(time(9), time(11), motorista=ANA_B), [cancelada])
+
+    def test_edicao_ignora_a_propria_reserva(self):
+        existente = reserva(time(8), time(10), motorista=ANA_B, id=1)
+        self.validador.validar(reserva(time(8), time(11), motorista=ANA_B, id=1), [existente])
 
 if __name__ == "__main__":
     unittest.main()

@@ -2,14 +2,22 @@ from django.db import connection
 from django.utils import timezone
 
 from core.domain.entidades import (
+    CategoriaCnh,
     CategoriaVeiculo,
     Colaborador,
+    Motorista,
     Reserva,
     StatusReserva,
     Veiculo,
 )
 
-from .models import ColaboradorModel, ReservaModel, SetorModel, VeiculoModel
+from .models import (
+    ColaboradorModel,
+    MotoristaModel,
+    ReservaModel,
+    SetorModel,
+    VeiculoModel,
+)
 
 
 def _normalizar(texto):
@@ -22,6 +30,17 @@ def _veiculo_para_dominio(modelo):
         categoria=CategoriaVeiculo(modelo.categoria),
         placa=modelo.placa,
         modelo=modelo.modelo,
+        ativo=modelo.ativo,
+    )
+
+
+def _motorista_para_dominio(modelo):
+    return Motorista(
+        matricula=modelo.matricula,
+        nome=modelo.nome,
+        categoria_cnh=CategoriaCnh(modelo.cnh_categoria),
+        validade_cnh=modelo.cnh_validade,
+        telefone=modelo.telefone,
         ativo=modelo.ativo,
     )
 
@@ -43,6 +62,7 @@ def _reserva_para_dominio(modelo):
         categoria=CategoriaVeiculo(pretendida) if pretendida else None,
         observacoes=modelo.observacoes,
         status=StatusReserva(modelo.status),
+        motorista=_motorista_para_dominio(modelo.motorista) if modelo.motorista else None,
     )
 
 
@@ -67,6 +87,23 @@ class ColaboradorDjangoRepository:
         return [
             Colaborador(m.nome, m.setor.nome, m.email, m.telefone) for m in consulta
         ]
+
+
+class MotoristaDjangoRepository:
+    def listar(self):
+        return [_motorista_para_dominio(m) for m in MotoristaModel.objects.all()]
+
+    def obter(self, matricula):
+        modelo = MotoristaModel.objects.filter(matricula=matricula).first()
+        return _motorista_para_dominio(modelo) if modelo else None
+
+
+def _travar(modelo, **filtro):
+    """No Postgres, trava a linha até o fim da transação: duas reservas simultâneas
+    do mesmo veículo (ou motorista) checam o conflito uma de cada vez.
+    No SQLite isso já é garantido pelo transaction_mode IMMEDIATE."""
+    if connection.in_atomic_block and connection.vendor == "postgresql":
+        list(modelo.objects.select_for_update().filter(**filtro).values("pk"))
 
 
 class VeiculoDjangoRepository:
@@ -96,7 +133,9 @@ class VeiculoDjangoRepository:
 
 class ReservaDjangoRepository:
     def _consulta(self):
-        return ReservaModel.objects.select_related("veiculo", "colaborador__setor")
+        return ReservaModel.objects.select_related(
+            "veiculo", "colaborador__setor", "motorista"
+        )
 
     def listar(self, data=None):
         consulta = self._consulta()
@@ -105,12 +144,13 @@ class ReservaDjangoRepository:
         return [_reserva_para_dominio(m) for m in consulta]
 
     def listar_do_veiculo_na_data(self, codigo, data):
-        if connection.in_atomic_block and connection.vendor == "postgresql":
-            # No Postgres, trava a linha do veículo até o fim da transação: duas
-            # reservas simultâneas do mesmo veículo checam o conflito uma de cada vez.
-            # (No SQLite isso já é garantido pelo transaction_mode IMMEDIATE.)
-            list(VeiculoModel.objects.select_for_update().filter(codigo=codigo).values("pk"))
+        _travar(VeiculoModel, codigo=codigo)
         consulta = self._consulta().filter(veiculo__codigo=codigo, data=data)
+        return [_reserva_para_dominio(m) for m in consulta]
+
+    def listar_do_motorista_na_data(self, matricula, data):
+        _travar(MotoristaModel, matricula=matricula)
+        consulta = self._consulta().filter(motorista__matricula=matricula, data=data)
         return [_reserva_para_dominio(m) for m in consulta]
 
     def obter(self, reserva_id):
@@ -128,6 +168,11 @@ class ReservaDjangoRepository:
             "retorno": reserva.retorno,
             "passageiros": reserva.passageiros,
             "veiculo": VeiculoModel.objects.get(codigo=reserva.veiculo.codigo),
+            "motorista": (
+                MotoristaModel.objects.get(matricula=reserva.motorista.matricula)
+                if reserva.motorista
+                else None
+            ),
             "categoria_pretendida": reserva.categoria.value if reserva.categoria else "",
             "observacoes": reserva.observacoes,
             "status": reserva.status.value,

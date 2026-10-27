@@ -31,6 +31,7 @@ async function pedir(metodo, url, dados) {
 
 export const api = {
   veiculos: () => pedir("GET", "/api/veiculos/").then((c) => c.veiculos),
+  motoristas: () => pedir("GET", "/api/motoristas/").then((c) => c.motoristas),
   reservas: (data) => pedir("GET", `/api/reservas/${data ? `?data=${data}` : ""}`).then((c) => c.reservas),
   reserva: (id) => pedir("GET", `/api/reservas/${id}/`).then((c) => c.reserva),
   colaboradores: () => pedir("GET", "/api/colaboradores/"),

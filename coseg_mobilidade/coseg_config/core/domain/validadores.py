@@ -4,7 +4,11 @@ from core.domain.entidades import CategoriaVeiculo
 from core.domain.excecoes import (
     CamposObrigatorios,
     CapacidadeExcedida,
+    CnhVencida,
     ConflitoDeHorario,
+    ConflitoDeMotorista,
+    MotoristaInativo,
+    MotoristaNaoHabilitado,
     PeriodoInvalido,
     ReservaInvalida,
 )
@@ -92,3 +96,24 @@ class ValidadorConflito:
         conflito = self.localizar(reserva, existentes)
         if conflito is not None:
             raise ConflitoDeHorario(conflito)
+
+
+class ValidadorMotorista:
+    """Motorista é opcional; quando informado, precisa estar ativo, habilitado para a
+    categoria do veículo, com CNH válida na data e livre no horário."""
+
+    def validar(self, reserva, agenda_do_motorista):
+        motorista = reserva.motorista
+        if motorista is None:
+            return
+        if not motorista.ativo:
+            raise MotoristaInativo(motorista)
+        if not motorista.pode_dirigir(reserva.veiculo.categoria):
+            raise MotoristaNaoHabilitado(motorista, reserva.veiculo.categoria)
+        if not motorista.cnh_valida_em(reserva.data):
+            raise CnhVencida(motorista, reserva.data)
+        for outra in agenda_do_motorista:
+            if reserva.id is not None and outra.id == reserva.id:
+                continue
+            if reserva.conflita_motorista_com(outra):
+                raise ConflitoDeMotorista(outra)

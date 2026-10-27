@@ -42,10 +42,10 @@ HTML + CSS + JavaScript puro (sem framework), servida pelo Django e consumindo a
 | Tela | O que faz |
 |---|---|
 | Início | Resumo do dia: reservas de hoje, veículos livres agora, quem está na rua e próximas saídas |
-| Agenda | Linha do tempo do dia, uma faixa por veículo. Clicar num espaço vazio abre a reserva já preenchida com veículo e horário |
+| Agenda | Linha do tempo do dia, por veículo ou **por motorista** (com a faixa "A definir"). Clicar num espaço vazio abre a reserva já preenchida com veículo e horário |
 | Nova reserva | Formulário com painel ao vivo: veículos livres no horário, categoria mínima pelo número de pessoas, escolha automática. Erros do servidor aparecem no campo certo |
 | Reservas | Lista por dia com busca e filtros de período e status; editar e cancelar |
-| Frota | Card de cada veículo com placa, modelo, situação e ocupação do dia |
+| Frota | Abas **Veículos** e **Motoristas**: placa, modelo, CNH, validade, situação e ocupação do dia |
 
 ```
 adapters/entrada/web/
@@ -81,6 +81,11 @@ Para criar o usuário do admin no banco da Vercel, rode no seu computador, com a
 python manage.py createsuperuser
 ```
 
+**Usando Supabase em vez de Neon:** no Supabase, abra **Connect** no projeto e copie a URL do
+**Transaction pooler** (porta 6543). Cole em `DATABASE_URL` nas variáveis da Vercel, trocando
+`[YOUR-PASSWORD]` pela senha do banco. O projeto reconhece o pooler sozinho. Não use a
+"Direct connection": ela só funciona em IPv6, e a Vercel não alcança.
+
 **Sem Postgres** o site também sobe, em *modo demonstração*: o SQLite fica em `/tmp` do
 servidor e é recriado (com a frota) sempre que a Vercel liga um servidor novo, ou seja,
 as reservas somem de tempos em tempos e o admin não tem usuário. Serve para mostrar, não
@@ -93,12 +98,16 @@ para usar de verdade.
 | `SetorModel` | nome (único) | 1 setor → N colaboradores |
 | `ColaboradorModel` | nome, e-mail, telefone | N → 1 setor; nome único dentro do setor |
 | `VeiculoModel` | código (único), categoria VL/VC, placa (única), modelo, ativo | 1 veículo → N reservas |
-| `ReservaModel` | atividade, origem, destino, data, saída, retorno, passageiros, categoria pretendida, observações, status | N → 1 colaborador; N → 1 veículo (PROTECT); retorno > saída; passageiros ≥ 1; status válido; índice (veículo, data) |
+| `MotoristaModel` | matrícula (única), nome, telefone, nº da CNH (único), categoria da CNH (B/C/D/E), validade da CNH, ativo | 1 motorista → N reservas (PROTECT) |
+| `ReservaModel` | atividade, origem, destino, data, saída, retorno, passageiros, categoria pretendida, observações, status | N → 1 colaborador; N → 1 veículo (PROTECT); N → 0..1 motorista; retorno > saída; passageiros ≥ 1; status válido; índice (veículo, data) |
 
 Todas as tabelas guardam `criado_em`/`atualizado_em` (na reserva, `criada_em`/`atualizada_em`).
 
 - **Status da reserva:** `CONFIRMADA` → `CANCELADA` ou `CONCLUIDA`. Cancelar não apaga:
   a reserva fica no histórico (com `cancelada_em`) e deixa de ocupar o veículo.
+- **Motorista (opcional na reserva):** precisa estar ativo, ter CNH compatível (leve: B ou
+  superior; coletivo de 18 lugares: D ou E), CNH válida na data e não estar escalado em outra
+  reserva no mesmo horário. Os motoristas do `carregar_seed` são fictícios, só para demonstração.
 - **Veículo inativo** (ex.: em manutenção) não pode ser reservado nem é escolhido na
   alocação automática por categoria.
 - A API continua recebendo `solicitante` e `setor` como texto: o servidor reaproveita o
@@ -117,6 +126,7 @@ python manage.py test tests
 | Método | Rota | Descrição |
 |---|---|---|
 | GET | `/api/veiculos/` | Lista a frota |
+| GET | `/api/motoristas/` | Lista motoristas com CNH, validade e o que cada um dirige |
 | GET | `/api/colaboradores/?setor=` | Lista colaboradores e setores cadastrados (sugestões do formulário) |
 | GET | `/api/reservas/?data=AAAA-MM-DD` | Lista reservas (filtro opcional) |
 | POST | `/api/reservas/` | Cria reserva (201, 400 ou 409) |
@@ -124,5 +134,7 @@ python manage.py test tests
 
 Respostas de erro: `{"sucesso": false, "codigo": "...", "erro": "...", "campo": "..."}`.
 Códigos: `CAMPOS_OBRIGATORIOS`, `CAPACIDADE_EXCEDIDA`, `PERIODO_INVALIDO`,
-`VEICULO_INATIVO` (400); `CONFLITO_DE_HORARIO`, `SEM_VEICULO_DISPONIVEL`,
+`VEICULO_INATIVO`, `MOTORISTA_NAO_HABILITADO`, `CNH_VENCIDA`, `MOTORISTA_INATIVO` (400);
+`CONFLITO_DE_HORARIO`, `CONFLITO_DE_MOTORISTA`, `SEM_VEICULO_DISPONIVEL`,
 `RESERVA_NAO_EDITAVEL` (409); `RESERVA_NAO_ENCONTRADA` (404).
+O POST/PUT de reserva aceita o campo opcional `"motorista": "MOT-001"` (matrícula).

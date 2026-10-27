@@ -114,6 +114,30 @@ export function conflita(a, b) {
     && minutos(b.saida) < minutos(a.retorno);
 }
 
+/** Mesmo motorista em dois horários que se cruzam (canceladas não contam). */
+export function conflitaMotorista(a, b) {
+  if (!a.motorista || !b.motorista || a.motorista !== b.motorista) return false;
+  if (a.status === "CANCELADA" || b.status === "CANCELADA") return false;
+  return a.data === b.data
+    && minutos(a.saida) < minutos(b.retorno)
+    && minutos(b.saida) < minutos(a.retorno);
+}
+
+/** Situação de um motorista para uma reserva (mesma ordem de regras do servidor). */
+export function situacaoMotorista(m, { categoria, data, saida, retorno, doDia, ignorarId }) {
+  if (!m.ativo) return { livre: false, motivo: "Inativo" };
+  if (categoria && !m.dirige.includes(categoria)) return { livre: false, motivo: `não dirige ${categoria}` };
+  if (data && m.cnh_validade < data) return { livre: false, motivo: "CNH vencida" };
+  if (data && saida && retorno && minutos(retorno) > minutos(saida)) {
+    const choque = (doDia || []).find((r) => r.id !== ignorarId
+      && conflitaMotorista({ motorista: m.matricula, data, saida, retorno, status: "CONFIRMADA" }, r));
+    if (choque) return { livre: false, motivo: `Escalado ${choque.saida}–${choque.retorno}`, choque };
+  }
+  return { livre: true, motivo: "Livre" };
+}
+
+export const primeiroNome = (nome) => (nome || "").split(" ")[0];
+
 // ---------------------------------------------------------------- rota ---
 export function lerRota() {
   const hash = location.hash.replace(/^#\/?/, "");

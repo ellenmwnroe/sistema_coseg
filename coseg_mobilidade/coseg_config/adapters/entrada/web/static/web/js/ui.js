@@ -125,6 +125,7 @@ export function abrirDetalhe(reserva, aoMudar) {
       </div>
       <dl class="detalhes">
         <div><dt>Veículo</dt><dd class="mono">${reserva.veiculo}</dd></div>
+        <div><dt>Motorista</dt><dd>${reserva.motorista_nome || "A definir"}</dd></div>
         <div><dt>Passageiros</dt><dd>${reserva.passageiros}</dd></div>
         <div><dt>Solicitante</dt><dd>${reserva.solicitante}</dd></div>
         <div><dt>Setor</dt><dd>${reserva.setor}</dd></div>

@@ -15,6 +15,19 @@ def veiculo_para_dict(veiculo):
     }
 
 
+def motorista_para_dict(motorista, hoje=None):
+    return {
+        "matricula": motorista.matricula,
+        "nome": motorista.nome,
+        "telefone": motorista.telefone,
+        "cnh_categoria": motorista.categoria_cnh.value,
+        "cnh_validade": motorista.validade_cnh.isoformat(),
+        "cnh_valida": motorista.cnh_valida_em(hoje or date.today()),
+        "dirige": [c.value for c in CategoriaVeiculo if motorista.pode_dirigir(c)],
+        "ativo": motorista.ativo,
+    }
+
+
 def reserva_para_dict(reserva):
     return {
         "id": reserva.id,
@@ -31,6 +44,8 @@ def reserva_para_dict(reserva):
         "categoria": reserva.categoria.value if reserva.categoria else None,
         "observacoes": reserva.observacoes,
         "status": reserva.status.value,
+        "motorista": reserva.motorista.matricula if reserva.motorista else None,
+        "motorista_nome": reserva.motorista.nome if reserva.motorista else None,
     }
 
 
@@ -84,4 +99,8 @@ def reserva_do_payload(payload):
         ),
         observacoes=_texto(payload.get("observacoes")) or "",
     )
-    return reserva, _texto(payload.get("veiculo")) or None
+    return (
+        reserva,
+        _texto(payload.get("veiculo")) or None,
+        _texto(payload.get("motorista")) or None,
+    )

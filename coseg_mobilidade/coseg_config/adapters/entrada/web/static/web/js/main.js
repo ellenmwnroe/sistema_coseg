@@ -14,6 +14,7 @@ const TELAS = {
   editar: { modulo: formulario, menu: "reservas", titulo: "Editar reserva" },
   reservas: { modulo: reservas, menu: "reservas", titulo: "Reservas" },
   frota: { modulo: frota, menu: "frota", titulo: "Frota" },
+  motoristas: { modulo: frota, menu: "frota", titulo: "Motoristas" },
 };
 
 const main = document.getElementById("app");

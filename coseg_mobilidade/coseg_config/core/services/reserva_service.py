@@ -13,14 +13,17 @@ from core.domain.validadores import (
     ValidadorCampos,
     ValidadorCapacidade,
     ValidadorConflito,
+    ValidadorMotorista,
     ValidadorPeriodo,
 )
 
 
 class ReservaService:
-    def __init__(self, reservas, veiculos, hoje=date.today):
+    def __init__(self, reservas, veiculos, hoje=date.today, motoristas=None):
         self._reservas = reservas
         self._veiculos = veiculos
+        self._motoristas = motoristas
+        self._motorista = ValidadorMotorista()
         self._campos = ValidadorCampos()
         self._capacidade = ValidadorCapacidade()
         self._periodo = ValidadorPeriodo(hoje)
@@ -28,6 +31,9 @@ class ReservaService:
 
     def frota(self):
         return self._veiculos.listar()
+
+    def motoristas(self):
+        return self._motoristas.listar() if self._motoristas else []
 
     def listar(self, data=None):
         return self._reservas.listar(data)
@@ -38,20 +44,20 @@ class ReservaService:
             raise ReservaNaoEncontrada(reserva_id)
         return reserva
 
-    def validar(self, reserva, codigo_veiculo=None):
+    def validar(self, reserva, codigo_veiculo=None, codigo_motorista=None):
         """Aplica todas as regras sem gravar (usado pelo Django Admin)."""
-        self._preparar(reserva, codigo_veiculo)
+        self._preparar(reserva, codigo_veiculo, codigo_motorista)
         return reserva
 
-    def criar(self, reserva, codigo_veiculo=None):
-        self._preparar(reserva, codigo_veiculo)
+    def criar(self, reserva, codigo_veiculo=None, codigo_motorista=None):
+        self._preparar(reserva, codigo_veiculo, codigo_motorista)
         return self._reservas.salvar(reserva)
 
-    def atualizar(self, reserva_id, reserva, codigo_veiculo=None):
+    def atualizar(self, reserva_id, reserva, codigo_veiculo=None, codigo_motorista=None):
         atual = self._obter_confirmada(reserva_id)
         reserva.id = reserva_id
         reserva.status = atual.status
-        self._preparar(reserva, codigo_veiculo)
+        self._preparar(reserva, codigo_veiculo, codigo_motorista)
         return self._reservas.salvar(reserva)
 
     def cancelar(self, reserva_id):
@@ -72,19 +78,34 @@ class ReservaService:
             raise ReservaNaoEditavel(reserva_id, reserva.status)
         return reserva
 
-    def _preparar(self, reserva, codigo_veiculo):
+    def _preparar(self, reserva, codigo_veiculo, codigo_motorista=None):
         if codigo_veiculo:
             reserva.veiculo = self._buscar_veiculo(codigo_veiculo)
+        if codigo_motorista:
+            reserva.motorista = self._buscar_motorista(codigo_motorista)
         self._campos.validar(reserva)
         self._capacidade.validar(reserva)
         self._periodo.validar(reserva)
         if reserva.veiculo is None:
             reserva.veiculo = self._alocar(reserva)
-            return
-        existentes = self._reservas.listar_do_veiculo_na_data(
-            reserva.veiculo.codigo, reserva.data
-        )
-        self._conflito.validar(reserva, existentes)
+        else:
+            existentes = self._reservas.listar_do_veiculo_na_data(
+                reserva.veiculo.codigo, reserva.data
+            )
+            self._conflito.validar(reserva, existentes)
+        if reserva.motorista is not None:
+            agenda = self._reservas.listar_do_motorista_na_data(
+                reserva.motorista.matricula, reserva.data
+            )
+            self._motorista.validar(reserva, agenda)
+
+    def _buscar_motorista(self, matricula):
+        motorista = self._motoristas.obter(matricula) if self._motoristas else None
+        if motorista is None:
+            raise ReservaInvalida(
+                f"O motorista {matricula} não está cadastrado.", campo="motorista"
+            )
+        return motorista
 
     def _buscar_veiculo(self, codigo):
         veiculo = self._veiculos.obter(codigo)

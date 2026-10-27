@@ -29,7 +29,7 @@ export async function render(main, rota) {
         <label class="busca">
           ${icone.busca}
           <span class="sr">Buscar</span>
-          <input type="search" id="busca" placeholder="Buscar por pessoa, setor, atividade, destino ou veículo" value="${filtro.busca}">
+          <input type="search" id="busca" placeholder="Buscar por pessoa, motorista, setor, atividade, destino ou veículo" value="${filtro.busca}">
         </label>
         <div class="segmentos" role="group" aria-label="Período">
           ${Object.entries(PERIODOS).map(([chave, nome]) => html`
@@ -58,7 +58,7 @@ export async function render(main, rota) {
       if (filtro.periodo === "proximas" && !ehFutura(r)) return false;
       if (filtro.periodo === "passadas" && ehFutura(r)) return false;
       if (!termo) return true;
-      return [r.solicitante, r.setor, r.atividade, r.destino, r.origem, r.veiculo]
+      return [r.solicitante, r.setor, r.atividade, r.destino, r.origem, r.veiculo, r.motorista_nome]
         .some((t) => (t || "").toLowerCase().includes(termo));
     });
     const ordem = (a, b) => (a.data + a.saida).localeCompare(b.data + b.saida);
@@ -95,7 +95,7 @@ export async function render(main, rota) {
             <div class="reserva-hora">${r.saida} → ${r.retorno}<small>${duracao(r.saida, r.retorno)}</small></div>
             <div class="reserva-info">
               <strong>${r.atividade}</strong>
-              <span>${r.solicitante} · ${r.setor}</span>
+              <span>${r.solicitante} · ${r.setor} · ${r.motorista_nome ? `motorista ${r.motorista_nome}` : "motorista a definir"}</span>
               <span>${r.origem} → ${r.destino} · ${r.passageiros} ${r.passageiros === 1 ? "pessoa" : "pessoas"}</span>
             </div>
             <div style="display:flex;gap:6px;flex-wrap:wrap">

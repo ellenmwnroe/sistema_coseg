@@ -32,6 +32,13 @@
     </div>
   </header>
 
+  {% if modo_demo %}
+  <div class="faixa-demo" role="alert">
+    <strong>Modo demonstração, sem banco de dados.</strong>
+    As reservas ficam num arquivo temporário de cada servidor da Vercel e podem sumir ou não aparecer.
+    Para uso de verdade, conecte um Postgres (variável <code>DATABASE_URL</code>).
+  </div>
+  {% endif %}
   <main id="app" tabindex="-1" aria-live="polite">
     <div class="carregando" role="status"><span class="spinner" aria-hidden="true"></span> Carregando…</div>
   </main>

@@ -82,6 +82,7 @@ export async function render(main, rota) {
     ...(estado.canceladas ? { canceladas: "1" } : {}),
   });
 
+  let pedido = 0;
   async function carregar() {
     campoData.value = estado.data;
     campoCanceladas.checked = estado.canceladas;
@@ -89,12 +90,18 @@ export async function render(main, rota) {
     main.querySelector("#agenda-titulo").textContent = rotuloDia(estado.data) === dataExtenso(estado.data)
       ? dataExtenso(estado.data) : `${rotuloDia(estado.data)}, ${dataExtenso(estado.data).split(", ")[1]}`;
     grade.setAttribute("aria-busy", "true");
+    const numero = ++pedido;
+    const dia = estado.data;
+    let lista;
     try {
-      estado.reservas = await api.reservas(estado.data);
+      lista = await api.reservas(dia);
     } catch (erro) {
+      if (numero !== pedido) return;
       aviso(erro.message, "erro");
-      estado.reservas = [];
+      lista = [];
     }
+    if (numero !== pedido) return; // chegou depois de um pedido mais novo
+    estado.reservas = lista;
     grade.removeAttribute("aria-busy");
     desenhar();
     rolarParaOFoco();
@@ -333,6 +340,7 @@ export async function render(main, rota) {
   const relogio = setInterval(() => { if (estado.data === hojeISO()) desenhar(); }, 60000);
 
   await carregar();
+  main.addEventListener("tela-visivel", rolarParaOFoco, { once: true });
   return () => {
     clearInterval(relogio);
     main.removeEventListener("click", aoClicar);

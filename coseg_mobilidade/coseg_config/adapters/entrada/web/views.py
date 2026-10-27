@@ -1,6 +1,7 @@
 import json
 from functools import wraps
 
+from django.conf import settings
 from django.db import transaction
 from django.http import JsonResponse
 from django.shortcuts import render
@@ -80,19 +81,26 @@ def _detalhes(exc):
 def api(view):
     @wraps(view)
     def envolvida(request, *args, **kwargs):
-        try:
-            return view(request, *args, **kwargs)
-        except ReservaNaoEncontrada as exc:
-            return _erro(404, "RESERVA_NAO_ENCONTRADA", str(exc))
-        except ReservaInvalida as exc:
-            for tipo, status, codigo in ERROS_DE_DOMINIO:
-                if isinstance(exc, tipo):
-                    return _erro(
-                        status, codigo, exc.mensagem, campo=exc.campo, **_detalhes(exc)
-                    )
-            raise
+        resposta = _executar(view, request, *args, **kwargs)
+        # Dados de reserva mudam a todo momento: nenhum navegador ou CDN guarda cópia.
+        resposta["Cache-Control"] = "no-store"
+        return resposta
 
     return envolvida
+
+
+def _executar(view, request, *args, **kwargs):
+    try:
+        return view(request, *args, **kwargs)
+    except ReservaNaoEncontrada as exc:
+        return _erro(404, "RESERVA_NAO_ENCONTRADA", str(exc))
+    except ReservaInvalida as exc:
+        for tipo, status, codigo in ERROS_DE_DOMINIO:
+            if isinstance(exc, tipo):
+                return _erro(
+                    status, codigo, exc.mensagem, campo=exc.campo, **_detalhes(exc)
+                )
+        raise
 
 
 def _corpo_json(request):
@@ -202,7 +210,7 @@ def colaboradores(request):
 @require_GET
 def app(request):
     """Interface web do PBL 2 (HTML + CSS + JavaScript puro, consumindo a API)."""
-    return render(request, "web/app.html")
+    return render(request, "web/app.html", {"modo_demo": settings.MODO_DEMO})
 
 
 @api

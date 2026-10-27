@@ -1,6 +1,6 @@
 # Evidências de teste da interface (PBL 2)
 
-Gerado por `python tests/e2e/evidencias.py` em 27/10/2026 01:59, num Chromium real, contra o Django com banco temporário e o seed do projeto.
+Gerado por `python tests/e2e/evidencias.py` em 27/10/2026 02:06, num Chromium real, contra o Django com banco temporário e o seed do projeto.
 
 | Grupo | Verificação | Resultado |
 |---|---|---|
@@ -17,6 +17,7 @@ Gerado por `python tests/e2e/evidencias.py` em 27/10/2026 01:59, num Chromium re
 | CRUD | Ler (GET /api/reservas/<id>/) devolve a reserva criada  | ✅ ok |
 | CRUD | Editar (PUT) muda o retorno e mantém o motorista (retorno 11:00, motorista Beatriz Lopes) | ✅ ok |
 | CRUD | Excluir (DELETE) cancela a reserva e ela fica no histórico  | ✅ ok |
+| Integração | Servidor lento: Reservas → Nova reserva rápido mostra a tela certa (tela: Pedir um veículo) | ✅ ok |
 | Responsividade | celular 390px: nenhuma tela com rolagem horizontal e o menu inteiro visível  | ✅ ok |
 | Responsividade | tablet 768px: nenhuma tela com rolagem horizontal e o menu inteiro visível  | ✅ ok |
 | Responsividade | desktop 1366px: nenhuma tela com rolagem horizontal e o menu inteiro visível  | ✅ ok |

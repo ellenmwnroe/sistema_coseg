@@ -396,7 +396,7 @@ export async function render(main, rota) {
 
   desenhar(null);
   await consultar();
-  if (!editando) form.elements.solicitante.focus({ preventScroll: true });
+  if (!editando) main.addEventListener("tela-visivel", () => form.elements.solicitante.focus({ preventScroll: true }), { once: true });
   return () => clearTimeout(espera);
 }
 

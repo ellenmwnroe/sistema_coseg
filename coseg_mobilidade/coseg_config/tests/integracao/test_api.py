@@ -2,7 +2,7 @@ import json
 from datetime import date, timedelta
 
 from django.core.management import call_command
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from adapters.saida.persistencia.models import ReservaModel, VeiculoModel
@@ -235,6 +235,18 @@ class PainelTest(ApiTest):
         self.assertEqual(resposta.status_code, 200)
         self.assertContains(resposta, 'id="app"')
         self.assertContains(resposta, "web/js/main.js")
+        self.assertNotContains(resposta, "Modo demonstração")
+
+    @override_settings(MODO_DEMO=True)
+    def test_interface_avisa_quando_roda_sem_banco_de_verdade(self):
+        resposta = self.client.get("/")
+        self.assertContains(resposta, "Modo demonstração")
+        self.assertContains(resposta, "DATABASE_URL")
+
+    def test_respostas_da_api_nao_ficam_em_cache(self):
+        for rota in ("/api/veiculos/", "/api/reservas/", "/api/reservas/999/"):
+            with self.subTest(rota=rota):
+                self.assertEqual(self.client.get(rota)["Cache-Control"], "no-store")
 
 
 class ColaboradoresTest(ApiTest):

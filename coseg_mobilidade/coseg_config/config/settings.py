@@ -59,6 +59,9 @@ TEMPLATES = [
     }
 ]
 
+# Na Vercel sem DATABASE_URL o banco é um SQLite temporário por servidor (ver wsgi.py).
+MODO_DEMO = NA_VERCEL and not os.environ.get("DATABASE_URL")
+
 if os.environ.get("DATABASE_URL"):
     # Produção: qualquer Postgres pela URL — Neon (pela Vercel) ou Supabase.
     url = urllib.parse.urlparse(os.environ["DATABASE_URL"])

@@ -20,8 +20,10 @@ const TELAS = {
 const main = document.getElementById("app");
 const fab = document.getElementById("fab");
 let limpar = null;
+let navegacao = 0; // só a navegação mais recente pode mostrar a tela
 
 async function navegar() {
+  const numero = ++navegacao;
   const rota = lerRota();
   const tela = TELAS[rota.nome] || TELAS[""];
 
@@ -36,13 +38,22 @@ async function navegar() {
 
   main.innerHTML = html`<div class="carregando" role="status"><span class="spinner" aria-hidden="true"></span> Carregando…</div>`.texto;
   window.scrollTo({ top: 0 });
+  // A tela é montada num "palco" fora da página e só entra quando fica pronta.
+  // Se a pessoa já foi para outra tela nesse meio-tempo, este resultado é descartado.
+  const palco = document.createElement("div");
+  palco.className = "palco";
+  let fim = null;
   try {
-    limpar = (await tela.modulo.render(main, rota)) || null;
+    fim = (await tela.modulo.render(palco, rota)) || null;
   } catch (erro) {
     console.error(erro);
-    main.innerHTML = telaDeErro(erro).texto;
+    palco.innerHTML = telaDeErro(erro).texto;
   }
+  if (numero !== navegacao) { fim?.(); return; }
+  main.replaceChildren(palco);
+  limpar = fim;
   main.focus({ preventScroll: true });
+  palco.dispatchEvent(new Event("tela-visivel"));
 }
 
 function relogio() {

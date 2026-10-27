@@ -218,6 +218,27 @@ def fluxos_desktop(page: Page) -> None:
     print_(page, "09-cancelada")
 
 
+def navegacao_com_servidor_lento(navegador) -> None:
+    """Servidor lento (como na Vercel): trocar de tela rápido não pode mostrar a tela errada."""
+    page = navegador.new_page(viewport={"width": 1366, "height": 900}, locale="pt-BR")
+    page.add_init_script("""
+      const original = window.fetch;
+      window.fetch = (url, opcoes) => new Promise((ok) => setTimeout(ok,
+        String(url).includes('/api/reservas/') && !(opcoes && opcoes.method && opcoes.method !== 'GET') ? 1500 : 300
+      )).then(() => original(url, opcoes));
+    """)
+    page.goto(f"{BASE}/#/")
+    page.wait_for_load_state("networkidle")
+    page.click(".menu a[data-rota='reservas']")
+    page.wait_for_timeout(100)
+    page.click(".menu a[data-rota='nova']")
+    page.wait_for_timeout(2500)
+    titulo = page.locator("main h1").first.inner_text()
+    checar("Integração", "Servidor lento: Reservas → Nova reserva rápido mostra a tela certa",
+           titulo == "Pedir um veículo", f"(tela: {titulo})")
+    page.close()
+
+
 TELAS = [("inicio", "#/"), ("nova", "#/nova"), ("agenda", f"#/agenda?data={AMANHA}"),
          ("reservas", "#/reservas"), ("frota", "#/frota"), ("motoristas", "#/motoristas")]
 TAMANHOS = [("celular", 390, 844), ("tablet", 768, 1024), ("desktop", 1366, 900)]
@@ -276,6 +297,7 @@ def main() -> int:
             page.on("pageerror", lambda e: erros_console.append(str(e)))
             fluxos_desktop(page)
             page.close()
+            navegacao_com_servidor_lento(navegador)
             responsividade(navegador)
             navegador.close()
         # 409 é esperado no teste de conflito (o navegador loga a resposta como erro de rede);

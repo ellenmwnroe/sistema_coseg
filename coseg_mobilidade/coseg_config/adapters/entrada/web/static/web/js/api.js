@@ -14,6 +14,7 @@ async function pedir(metodo, url, dados) {
   try {
     resposta = await fetch(url, {
       method: metodo,
+      cache: "no-store",
       headers: dados ? { "Content-Type": "application/json" } : {},
       body: dados ? JSON.stringify(dados) : undefined,
     });

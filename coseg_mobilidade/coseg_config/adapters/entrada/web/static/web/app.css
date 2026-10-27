@@ -110,8 +110,30 @@ img, svg { display: block; }
 /* ------------------------------------------------------------- layout --- */
 
 main { max-width: var(--largura); margin: 0 auto; padding: 8px var(--lateral) 120px; outline: none; }
-.tela { display: flex; flex-direction: column; gap: 28px; animation: entrar .35s ease both; }
+.tela { display: flex; flex-direction: column; gap: 28px; animation: aparecer .3s ease both; }
 @keyframes entrar { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* Navegação fluida: a tela atual esmaece enquanto a próxima carrega (sem piscar
+   "Carregando…" em trocas rápidas) e a nova entra em cascata, bloco por bloco. */
+#app { transition: opacity .18s ease; }
+#app.trocando { opacity: .55; pointer-events: none; transition: opacity .2s ease .12s; }
+/* Barra fina no topo enquanto a próxima tela carrega. */
+.barra-navegacao {
+  position: fixed; top: 0; left: 0; z-index: 70; width: 100%; height: 3px;
+  background: linear-gradient(90deg, var(--verde), var(--menta)); transform-origin: left; transform: scaleX(0); opacity: 0;
+  pointer-events: none;
+}
+.barra-navegacao.ativo { opacity: 1; transform: scaleX(.85); transition: opacity .15s ease .12s, transform 2.5s cubic-bezier(.1, .6, .2, 1) .12s; }
+.barra-navegacao.terminou { opacity: 0; transform: scaleX(1); transition: transform .2s ease, opacity .3s ease .15s; }
+.tela > * { animation: subir .5s cubic-bezier(.2, .7, .2, 1) backwards; }
+.tela > :nth-child(2) { animation-delay: .05s; }
+.tela > :nth-child(3) { animation-delay: .1s; }
+.tela > :nth-child(4) { animation-delay: .15s; }
+.tela > :nth-child(n+5) { animation-delay: .2s; }
+@keyframes aparecer { from { opacity: 0; } }
+@keyframes subir { from { opacity: 0; transform: translateY(14px); } }
+/* Recarregar dados dentro da mesma tela (trocar o dia da agenda, por exemplo). */
+[aria-busy="true"] { opacity: .5; transition: opacity .2s ease; }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
 
 .cabecalho { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; flex-wrap: wrap; padding-top: 16px; }
@@ -451,7 +473,7 @@ legend.secao-cabeca + * { clear: both; }
   border: 0; padding: 0; border-radius: var(--r-xl); width: min(560px, calc(100vw - 32px));
   background: var(--papel); color: var(--tinta); box-shadow: 0 30px 80px -20px rgba(18, 20, 18, .5);
 }
-.dialogo::backdrop { background: rgba(18, 20, 18, .45); backdrop-filter: blur(3px); }
+.dialogo::backdrop { background: rgba(18, 20, 18, .45); backdrop-filter: blur(3px); animation: aparecer .2s ease; }
 .dialogo[open] { animation: entrar .2s ease both; }
 .dialogo-corpo { padding: 28px; display: flex; flex-direction: column; gap: 20px; }
 .dialogo-topo { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
@@ -477,7 +499,7 @@ legend.secao-cabeca + * { clear: both; }
 .aviso svg { width: 22px; height: 22px; flex: none; stroke: var(--menta); fill: none; stroke-width: 2.2; }
 .aviso.erro svg { stroke: #FF9B8F; }
 
-.carregando { display: flex; align-items: center; gap: 12px; padding: 64px 0; color: var(--tinta-3); justify-content: center; }
+.carregando { animation: aparecer .3s ease .1s backwards; display: flex; align-items: center; gap: 12px; padding: 64px 0; color: var(--tinta-3); justify-content: center; }
 .spinner { width: 22px; height: 22px; border-radius: 50%; border: 3px solid var(--cinza); border-top-color: var(--tinta); animation: girar .8s linear infinite; }
 @keyframes girar { to { transform: rotate(360deg); } }
 .noscript { padding: 24px; text-align: center; }

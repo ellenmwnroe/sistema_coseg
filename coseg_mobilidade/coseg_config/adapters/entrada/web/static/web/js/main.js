@@ -21,6 +21,10 @@ const main = document.getElementById("app");
 const fab = document.getElementById("fab");
 let limpar = null;
 let navegacao = 0; // só a navegação mais recente pode mostrar a tela
+const progresso = document.createElement("div");
+progresso.className = "barra-navegacao";
+progresso.setAttribute("aria-hidden", "true");
+document.body.append(progresso);
 
 async function navegar() {
   const numero = ++navegacao;
@@ -36,8 +40,12 @@ async function navegar() {
   });
   fab.hidden = tela.modulo === formulario;
 
-  main.innerHTML = html`<div class="carregando" role="status"><span class="spinner" aria-hidden="true"></span> Carregando…</div>`.texto;
-  window.scrollTo({ top: 0 });
+  // A tela atual fica esmaecida (com a barra no topo) enquanto a próxima carrega;
+  // nada de "Carregando…" piscando entre uma tela e outra.
+  main.classList.add("trocando");
+  progresso.className = "barra-navegacao";
+  void progresso.offsetWidth; // recomeça a barra do zero
+  progresso.className = "barra-navegacao ativo";
   // A tela é montada num "palco" fora da página e só entra quando fica pronta.
   // Se a pessoa já foi para outra tela nesse meio-tempo, este resultado é descartado.
   const palco = document.createElement("div");
@@ -50,7 +58,10 @@ async function navegar() {
     palco.innerHTML = telaDeErro(erro).texto;
   }
   if (numero !== navegacao) { fim?.(); return; }
+  main.classList.remove("trocando");
+  progresso.className = "barra-navegacao terminou";
   main.replaceChildren(palco);
+  window.scrollTo({ top: 0, behavior: "instant" });
   limpar = fim;
   main.focus({ preventScroll: true });
   palco.dispatchEvent(new Event("tela-visivel"));

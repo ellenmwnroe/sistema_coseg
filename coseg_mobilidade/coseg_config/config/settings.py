@@ -59,12 +59,21 @@ TEMPLATES = [
     }
 ]
 
-if os.environ.get("DATABASE_URL"):
+# Endereço do Postgres. SUPABASE_DB_URL tem prioridade: é um nome que nenhuma
+# integração da Vercel cria sozinha, então não tem como vir com outro valor.
+VARIAVEL_BANCO = next((n for n in ("SUPABASE_DB_URL", "DATABASE_URL") if os.environ.get(n)), None)
+
+if VARIAVEL_BANCO:
     # Produção: qualquer Postgres pela URL — Neon (pela Vercel) ou Supabase.
-    # Tolera erros comuns ao colar na Vercel: espaços, aspas e "DATABASE_URL=" junto.
-    bruta = os.environ["DATABASE_URL"].strip().strip("\"'").strip()
-    if bruta.upper().startswith("DATABASE_URL="):
+    # Tolera erros comuns ao colar na Vercel: espaços, aspas e "NOME=" junto.
+    bruta = os.environ[VARIAVEL_BANCO].strip().strip("\"'").strip()
+    if bruta.upper().startswith(VARIAVEL_BANCO + "="):
         bruta = bruta.split("=", 1)[1].strip().strip("\"'").strip()
+    # Se o endereço veio colado depois de outro texto, aproveita a partir do "postgres".
+    for prefixo in ("postgresql://", "postgres://"):
+        if bruta.find(prefixo) > 0:
+            bruta = bruta[bruta.find(prefixo):].split()[0].strip("\"'")
+            break
     try:
         url = urllib.parse.urlparse(bruta)
         valida = url.scheme in ("postgres", "postgresql") and bool(url.hostname) and "[" not in bruta
@@ -74,9 +83,10 @@ if os.environ.get("DATABASE_URL"):
         from django.core.exceptions import ImproperlyConfigured
 
         raise ImproperlyConfigured(
-            "DATABASE_URL inválida: precisa ser só o endereço, no formato "
+            f"{VARIAVEL_BANCO} inválida: precisa ser só o endereço, no formato "
             "postgresql://usuario:senha@servidor:porta/banco (sem aspas, espaços ou colchetes). "
-            f"Começo do valor recebido: {bruta[:14]!r}"
+            f"Começo do valor recebido: {bruta[:14]!r} ({len(bruta)} caracteres). "
+            "Dica: crie a variável SUPABASE_DB_URL só com o endereço; ela tem prioridade."
         )
     opcoes = dict(urllib.parse.parse_qsl(url.query))
     porta = url.port or 5432

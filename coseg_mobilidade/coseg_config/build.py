@@ -1,6 +1,6 @@
 """Comando de build da Vercel (configurado no pyproject.toml).
 
-Com Postgres conectado (DATABASE_URL), aplica as migrations e carrega a frota
+Com Postgres conectado (SUPABASE_DB_URL ou DATABASE_URL), aplica as migrations e carrega a frota
 a cada deploy. O carregar_seed não duplica nada se rodar de novo.
 """
 import os
@@ -13,7 +13,7 @@ def manage(*args):
 
 
 def main():
-    if os.environ.get("DATABASE_URL"):
+    if os.environ.get("SUPABASE_DB_URL") or os.environ.get("DATABASE_URL"):
         manage("migrate", "--noinput")
         manage("carregar_seed")
     else:

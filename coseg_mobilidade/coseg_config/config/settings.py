@@ -61,7 +61,23 @@ TEMPLATES = [
 
 if os.environ.get("DATABASE_URL"):
     # Produção: qualquer Postgres pela URL — Neon (pela Vercel) ou Supabase.
-    url = urllib.parse.urlparse(os.environ["DATABASE_URL"])
+    # Tolera erros comuns ao colar na Vercel: espaços, aspas e "DATABASE_URL=" junto.
+    bruta = os.environ["DATABASE_URL"].strip().strip("\"'").strip()
+    if bruta.upper().startswith("DATABASE_URL="):
+        bruta = bruta.split("=", 1)[1].strip().strip("\"'").strip()
+    try:
+        url = urllib.parse.urlparse(bruta)
+        valida = url.scheme in ("postgres", "postgresql") and bool(url.hostname) and "[" not in bruta
+    except ValueError:  # ex.: "[YOUR-PASSWORD]" esquecido no lugar da senha
+        valida = False
+    if not valida:
+        from django.core.exceptions import ImproperlyConfigured
+
+        raise ImproperlyConfigured(
+            "DATABASE_URL inválida: precisa ser só o endereço, no formato "
+            "postgresql://usuario:senha@servidor:porta/banco (sem aspas, espaços ou colchetes). "
+            f"Começo do valor recebido: {bruta[:14]!r}"
+        )
     opcoes = dict(urllib.parse.parse_qsl(url.query))
     porta = url.port or 5432
     # Supabase "Transaction pooler" (porta 6543): cada consulta pode cair numa conexão

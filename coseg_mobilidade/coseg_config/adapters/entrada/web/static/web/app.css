@@ -88,12 +88,6 @@ img, svg { display: block; }
 .menu a:hover { color: var(--tinta); background: var(--cinza-2); }
 .menu a[aria-current="page"] { color: var(--tinta); font-weight: 600; background: var(--papel); box-shadow: inset 0 0 0 1.5px var(--tinta); }
 .topo-direita { display: flex; gap: 8px; align-items: center; }
-.faixa-demo {
-  max-width: var(--largura); margin: 0 auto 8px; padding: 12px var(--lateral);
-  background: #FFF4D6; color: var(--tinta); font-size: 14px; line-height: 1.45;
-  border-top: 1px solid #E9D9A6; border-bottom: 1px solid #E9D9A6;
-}
-.faixa-demo code { font-family: "JetBrains Mono", monospace; font-size: 13px; }
 /* Tablet: o menu de cima precisa caber inteiro (Frota sumia em 768px). */
 @media (max-width: 1000px) and (min-width: 761px) {
   .topo { gap: 12px; }

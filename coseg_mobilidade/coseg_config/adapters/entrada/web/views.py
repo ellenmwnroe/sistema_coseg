@@ -1,7 +1,6 @@
 import json
 from functools import wraps
 
-from django.conf import settings
 from django.db import transaction
 from django.http import JsonResponse
 from django.shortcuts import render
@@ -210,7 +209,7 @@ def colaboradores(request):
 @require_GET
 def app(request):
     """Interface web do PBL 2 (HTML + CSS + JavaScript puro, consumindo a API)."""
-    return render(request, "web/app.html", {"modo_demo": settings.MODO_DEMO})
+    return render(request, "web/app.html")
 
 
 @api

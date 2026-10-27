@@ -104,7 +104,7 @@ servidor e é recriado (com a frota) sempre que a Vercel liga um servidor novo, 
 as reservas somem de tempos em tempos e o admin não tem usuário. Pior: a Vercel pode
 atender cada requisição num servidor diferente, cada um com o seu arquivo, então uma reserva
 recém-criada pode não aparecer na agenda, e cada servidor novo demora alguns segundos para
-preparar o banco. Nesse modo a interface mostra uma faixa amarela avisando. Serve para
+preparar o banco. Serve para
 mostrar, não para usar de verdade.
 
 ## Modelo de dados

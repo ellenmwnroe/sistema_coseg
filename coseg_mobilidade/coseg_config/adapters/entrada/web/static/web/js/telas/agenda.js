@@ -53,17 +53,17 @@ export async function render(main, rota) {
         </div>
       </div>
 
-      <div class="card" style="padding:0">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;padding:22px 24px 6px">
+      <div class="card card-agenda">
+        <div class="agenda-barra">
           <div class="segmentos" role="group" aria-label="Ver a agenda por">
             <button type="button" data-modo="veiculos">Por veículo</button>
             <button type="button" data-modo="motoristas">Por motorista</button>
           </div>
           <div class="legenda" aria-label="Legenda">
-            <span><i style="background:var(--tinta)"></i>Leve (VL)</span>
-            <span><i style="background:var(--verde)"></i>Coletivo (VC)</span>
-            <span><i style="background:#A9AEA8"></i>Concluída</span>
-            <span><i style="box-shadow:inset 0 0 0 2px var(--tinta-3)"></i>Cancelada</span>
+            <span><i class="leg-vl"></i>Leve (VL)</span>
+            <span><i class="leg-vc"></i>Coletivo (VC)</span>
+            <span><i class="leg-concluida"></i>Concluída</span>
+            <span><i class="leg-cancelada"></i>Cancelada</span>
           </div>
           <label class="alternar"><input type="checkbox" id="agenda-canceladas"> Mostrar canceladas</label>
         </div>
@@ -199,7 +199,7 @@ export async function render(main, rota) {
       <div class="agenda-interna" style="--passo-hora: calc(100% / ${horas})">
         <div class="agenda-linha agenda-cabeca" aria-hidden="true">
           <div></div>
-          <div class="agenda-trilho" style="border-top:0;background:none;cursor:default">
+          <div class="agenda-trilho agenda-reguas">
             ${Array.from({ length: horas + 1 }, (_, i) => html`
               <span class="agenda-hora" style="left:${(i / horas) * 100}%">${paraHHMM(inicio + i * 60).slice(0, 2)}h</span>`)}
           </div>

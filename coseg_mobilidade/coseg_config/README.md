@@ -43,7 +43,7 @@ HTML + CSS + JavaScript puro (sem framework), servida pelo Django e consumindo a
 |---|---|
 | Início | Resumo do dia: reservas de hoje, veículos livres agora, quem está na rua e próximas saídas |
 | Agenda | Linha do tempo do dia, por veículo ou **por motorista** (com a faixa "A definir"). Clicar num espaço vazio abre a reserva já preenchida com veículo e horário |
-| Nova reserva | Formulário com painel ao vivo: veículos livres no horário, categoria mínima pelo número de pessoas, escolha automática do veículo e **prévia do motorista que será escalado** (com o motivo de cada um estar ou não disponível). Erros do servidor aparecem no campo certo |
+| Nova reserva | Formulário com painel ao vivo, **consultado no servidor** (`/api/disponibilidade/`): veículos livres no horário, categoria mínima pelo número de pessoas e **prévia do motorista que será escalado**. O campo "Veículo ou categoria pretendida" aceita *Automático*, *Qualquer VL*, *Qualquer VC* ou um veículo específico. Erros do servidor aparecem no campo certo |
 | Reservas | Lista por dia com busca e filtros de período e status; editar e cancelar |
 | Frota | Abas **Veículos** e **Motoristas**: placa, modelo, CNH, validade, situação e ocupação do dia |
 
@@ -54,13 +54,26 @@ adapters/entrada/web/
   static/web/js/
     main.js                  # rotas (#/agenda, #/nova...) e relógio
     api.js                   # chamadas à API e tratamento de erro
-    util.js                  # HTML seguro, datas e regras espelhadas do servidor
+    util.js                  # HTML seguro e formatação de datas (nenhuma regra de negócio)
     ui.js                    # avisos, diálogos, detalhe da reserva
     telas/                   # inicio, agenda, formulario, reservas, frota
 ```
 
-A tela antecipa as regras (capacidade, conflito, data) para orientar quem preenche,
-mas quem decide é sempre o servidor. O painel antigo continua em `/painel/`.
+**Estrutura, estilo e comportamento separados:** o HTML vem do template e dos
+componentes de cada tela, toda a aparência está em `app.css` (os únicos `style=` que
+sobram são posições calculadas, como o início e a largura de um bloco na agenda) e o
+comportamento fica nos módulos JS.
+
+**Sem regra duplicada no JavaScript:** capacidade, datas, conflito de horário e
+escala de motorista existem só no `ReservaService`. Enquanto a pessoa preenche, a tela
+chama `GET /api/disponibilidade/`, que roda essas mesmas regras **sem gravar nada**
+(`ReservaService.simular`) e devolve o que aconteceria; a tela só desenha a resposta.
+A única checagem local é "campo obrigatório vazio", para não gastar uma ida ao servidor;
+o servidor confere tudo de novo no POST/PUT. O painel antigo continua em `/painel/`.
+
+**Exclusão = cancelamento lógico:** `DELETE /api/reservas/<id>/` não apaga a linha,
+muda o status para `CANCELADA` e guarda `cancelada_em`. Assim o histórico de uso da
+frota fica preservado para auditoria e o horário volta a ficar livre.
 
 ## Deploy na Vercel
 
@@ -127,6 +140,23 @@ Todas as tabelas guardam `criado_em`/`atualizado_em` (na reserva, `criada_em`/`a
 python manage.py test tests
 ```
 
+Testes de unidade (regras do domínio), de integração (API, persistência, admin,
+disponibilidade) e de escala de motoristas.
+
+### Evidências da interface (navegador)
+
+```
+pip install playwright
+python -m playwright install chromium
+python tests/e2e/evidencias.py
+```
+
+O script sobe o Django num banco temporário, abre a interface num Chromium e percorre
+CRUD (criar, ler, editar, cancelar), integração com a API, mensagens de erro
+(campos obrigatórios, conflito 409, capacidade) e responsividade (390, 768 e 1366 px,
+sem rolagem horizontal). O resultado fica em
+[`docs/evidencias/RELATORIO.md`](docs/evidencias/RELATORIO.md), com os prints ao lado.
+
 ## Endpoints
 
 | Método | Rota | Descrição |
@@ -134,6 +164,7 @@ python manage.py test tests
 | GET | `/api/veiculos/` | Lista a frota |
 | GET | `/api/motoristas/` | Lista motoristas com CNH, validade e o que cada um dirige |
 | GET | `/api/colaboradores/?setor=` | Lista colaboradores e setores cadastrados (sugestões do formulário) |
+| GET | `/api/disponibilidade/?data=&saida=&retorno=&passageiros=&veiculo=` ou `&categoria=` (`&ignorar=<id>` ao editar) | Simula o pedido sem gravar: situação de cada veículo e motorista, veículo e motorista que seriam escolhidos e os erros que o POST daria |
 | GET | `/api/reservas/?data=AAAA-MM-DD` | Lista reservas (filtro opcional) |
 | POST | `/api/reservas/` | Cria reserva (201, 400 ou 409) |
 | GET, PUT, DELETE | `/api/reservas/<id>/` | Consulta, altera ou cancela (DELETE marca como cancelada, sem apagar) |

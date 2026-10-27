@@ -112,7 +112,7 @@ export function abrirDetalhe(reserva, aoMudar) {
       <div class="dialogo-topo">
         <div>
           <p class="sobrelinha">Reserva #${reserva.id} · ${pilulaStatus(reserva.status)}</p>
-          <h2 id="dialogo-titulo" style="margin-top:8px">${reserva.atividade}</h2>
+          <h2 id="dialogo-titulo" class="dialogo-titulo">${reserva.atividade}</h2>
         </div>
         <button class="botao botao-fantasma botao-icone" data-fechar aria-label="Fechar">${icone.fechar}</button>
       </div>
@@ -120,7 +120,7 @@ export function abrirDetalhe(reserva, aoMudar) {
         ${icone.calendario}
         <div>
           <div>${dataExtenso(reserva.data)}</div>
-          <div class="mono">${reserva.saida} → ${reserva.retorno} <small style="font-size:14px;color:#C4C9C3">${duracao(reserva.saida, reserva.retorno)}</small></div>
+          <div class="mono">${reserva.saida} → ${reserva.retorno} <small class="faixa-duracao">${duracao(reserva.saida, reserva.retorno)}</small></div>
         </div>
       </div>
       <dl class="detalhes">
@@ -148,6 +148,6 @@ export const telaDeErro = (erro) => html`
     <div class="card vazio-grande">
       <strong>Algo deu errado</strong>
       <p>${erro.message}</p>
-      <p style="margin-top:18px"><a class="botao botao-escuro" href="#/">Voltar ao início</a></p>
+      <p class="acoes-vazio"><a class="botao botao-escuro" href="#/">Voltar ao início</a></p>
     </div>
   </section>`;

@@ -70,6 +70,34 @@ def ler_data(valor, campo="data"):
     return _converter(valor, campo, date.fromisoformat, "AAAA-MM-DD")
 
 
+def ler_hora(valor, campo):
+    return _converter(valor, campo, time.fromisoformat, "HH:MM")
+
+
+def ler_inteiro(valor, campo):
+    return _converter(valor, campo, _inteiro, "um número inteiro")
+
+
+def ler_categoria(valor):
+    return _converter(valor, "categoria", lambda v: CategoriaVeiculo(str(v).upper()), "VL ou VC")
+
+
+def situacao_para_dict(situacao, chave, extra=None):
+    corpo = {
+        chave: getattr(situacao.item, "codigo", None) or situacao.item.matricula,
+        "livre": situacao.livre,
+        "motivo": situacao.motivo,
+        "conflito": (
+            {"reserva_id": situacao.conflito.id,
+             "saida": situacao.conflito.saida.strftime("%H:%M"),
+             "retorno": situacao.conflito.retorno.strftime("%H:%M")}
+            if situacao.conflito else None
+        ),
+    }
+    corpo.update(extra or {})
+    return corpo
+
+
 def _texto(valor):
     return None if valor is None else str(valor)
 

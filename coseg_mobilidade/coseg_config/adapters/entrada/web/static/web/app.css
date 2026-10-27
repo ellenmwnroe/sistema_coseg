@@ -278,6 +278,33 @@ button.item:hover .item-titulo { text-decoration: underline; text-underline-offs
 .form-layout { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(320px, 1fr); gap: 24px; align-items: start; }
 @media (max-width: 1000px) { .form-layout { grid-template-columns: 1fr; } }
 .secao { display: flex; flex-direction: column; gap: 18px; }
+fieldset.secao { border: 0; margin: 0; min-width: 0; }
+legend.secao-cabeca { padding: 0; margin-bottom: 18px; float: left; width: 100%; }
+legend.secao-cabeca + * { clear: both; }
+.coluna-form { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+/* Classes que substituíram estilos escritos dentro do JavaScript. */
+.dialogo-titulo { margin-top: 8px; }
+.faixa-duracao { font-size: 14px; color: #C4C9C3; }
+.card-agenda { padding: 0; }
+.agenda-barra { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; padding: 22px 24px 6px; }
+.agenda-reguas { border-top: 0; background: none; cursor: default; }
+.leg-vl { background: var(--tinta); }
+.leg-vc { background: var(--verde); }
+.leg-concluida { background: #A9AEA8; }
+.leg-cancelada { box-shadow: inset 0 0 0 2px var(--tinta-3); }
+.card-topo-pilulas { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.motorista-matricula { font-size: 14px; margin-top: 4px; }
+.sobrelinha-menta { color: var(--menta); }
+.hero-titulo { margin-top: 14px; }
+.item-volta { font-size: 14px; }
+.lista-dias { display: flex; flex-direction: column; gap: 28px; }
+.reserva-pilulas { display: flex; gap: 6px; flex-wrap: wrap; }
+.alertas { display: flex; flex-direction: column; gap: 10px; }
+.alertas:empty { display: none; }
+.acoes-vazio { margin-top: 18px; }
+.resumo-fonte { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #C4C9C3; }
+.resumo-fonte svg { width: 16px; height: 16px; stroke: var(--menta); fill: none; stroke-width: 2; flex: none; }
+.spinner-pequeno { width: 14px; height: 14px; border-width: 2px; border-color: #3A3E3A; border-top-color: var(--menta); }
 .secao-cabeca { display: flex; align-items: center; gap: 14px; }
 .secao-num { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--tinta); color: var(--menta); font-family: var(--mono); font-size: 14px; flex: none; }
 .secao-titulo { font-size: 22px; font-weight: 500; letter-spacing: -.02em; }

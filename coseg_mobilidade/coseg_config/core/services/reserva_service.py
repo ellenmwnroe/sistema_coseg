@@ -1,7 +1,7 @@
-from dataclasses import replace
+from dataclasses import dataclass, field, replace
 from datetime import date
 
-from core.domain.entidades import StatusReserva
+from core.domain.entidades import Reserva, StatusReserva
 from core.domain.excecoes import (
     ReservaInvalida,
     SemMotoristaDisponivel,
@@ -16,8 +16,36 @@ from core.domain.validadores import (
     ValidadorConflito,
     ValidadorMotorista,
     ValidadorPeriodo,
+    categoria_minima,
     ordem_de_escala,
 )
+
+
+@dataclass
+class Situacao:
+    """Como um veículo (ou motorista) está para o pedido simulado."""
+
+    item: object
+    livre: bool
+    motivo: str
+    conflito: Reserva | None = None
+
+
+@dataclass
+class Simulacao:
+    """Resultado de simular uma reserva sem gravar (usado pelo formulário web)."""
+
+    categoria_minima: object = None
+    erros: list = field(default_factory=list)
+    veiculos: list = field(default_factory=list)
+    veiculo: object = None
+    motoristas: list = field(default_factory=list)
+    motorista: object = None
+    motoristas_cadastrados: int = 0
+
+
+def _faixa(reserva):
+    return f"{reserva.saida:%H:%M}–{reserva.retorno:%H:%M}"
 
 
 class ReservaService:
@@ -104,29 +132,47 @@ class ReservaService:
         else:
             reserva.motorista = self._escalar(reserva, preferido)
 
-    def _escalar(self, reserva, preferido=None):
-        """Escala automaticamente um motorista habilitado e livre no horário."""
-        if self._motoristas is None:
-            return None
-        todos = self._motoristas.listar()
-        if not todos:
-            return None  # sistema sem motoristas cadastrados: reserva segue sem escala
+    def _situacao_dos_motoristas(self, reserva):
+        """Avalia cada motorista para a reserva (mesmas regras do ValidadorMotorista)."""
         categoria = reserva.veiculo.categoria
-        candidatos = []
-        for motorista in todos:
-            if not motorista.pode_ser_escalado_para(categoria, reserva.data):
+        situacoes = []
+        for motorista in self._motoristas.listar():
+            if not motorista.ativo:
+                situacoes.append((Situacao(motorista, False, "Inativo"), 0))
+                continue
+            if not motorista.pode_dirigir(categoria):
+                situacoes.append((Situacao(motorista, False, f"Não dirige {categoria.value}"), 0))
+                continue
+            if not motorista.cnh_valida_em(reserva.data):
+                situacoes.append((Situacao(motorista, False, "CNH vencida"), 0))
                 continue
             agenda = [
                 r for r in self._reservas.listar_do_motorista_na_data(motorista.matricula, reserva.data)
                 if r.id != reserva.id
             ]
-            if any(replace(reserva, motorista=motorista).conflita_motorista_com(r) for r in agenda):
-                continue
-            carga = sum(r.duracao_minutos for r in agenda if r.status.value != "CANCELADA")
-            candidatos.append((ordem_de_escala(motorista, carga, preferido), motorista))
-        if not candidatos:
-            raise SemMotoristaDisponivel(categoria, reserva.data, reserva.saida, reserva.retorno)
-        return min(candidatos, key=lambda par: par[0])[1]
+            tentativa = replace(reserva, motorista=motorista)
+            choque = next((r for r in agenda if tentativa.conflita_motorista_com(r)), None)
+            carga = sum(r.duracao_minutos for r in agenda if r.status is not StatusReserva.CANCELADA)
+            if choque:
+                situacoes.append((Situacao(motorista, False, f"Escalado {_faixa(choque)}", choque), carga))
+            else:
+                situacoes.append((Situacao(motorista, True, "Livre"), carga))
+        return situacoes
+
+    def _escalar(self, reserva, preferido=None):
+        """Escala automaticamente um motorista habilitado e livre no horário."""
+        if self._motoristas is None or not self._motoristas.listar():
+            return None  # sistema sem motoristas cadastrados: reserva segue sem escala
+        livres = [
+            (ordem_de_escala(sit.item, carga, preferido), sit.item)
+            for sit, carga in self._situacao_dos_motoristas(reserva)
+            if sit.livre
+        ]
+        if not livres:
+            raise SemMotoristaDisponivel(
+                reserva.veiculo.categoria, reserva.data, reserva.saida, reserva.retorno
+            )
+        return min(livres, key=lambda par: par[0])[1]
 
     def _buscar_motorista(self, matricula):
         motorista = self._motoristas.obter(matricula) if self._motoristas else None
@@ -159,3 +205,78 @@ class ReservaService:
         raise SemVeiculoDisponivel(
             reserva.categoria, reserva.data, reserva.saida, reserva.retorno
         )
+
+    # ------------------------------------------------------------ simulação ---
+    def simular(self, data, saida, retorno, passageiros, codigo_veiculo=None,
+                categoria=None, ignorar_id=None):
+        """Responde, sem gravar nada, o que aconteceria com este pedido: situação de
+        cada veículo e motorista, o veículo alocado e o motorista que seria escalado.
+        O formulário web mostra isto em vez de repetir as regras no JavaScript."""
+        resultado = Simulacao()
+        try:
+            resultado.categoria_minima = categoria_minima(passageiros)
+        except ReservaInvalida as exc:
+            resultado.erros.append(exc)
+        alvo = categoria or resultado.categoria_minima
+        tentativa = Reserva(
+            solicitante="", setor="", atividade="", origem="", destino="",
+            data=data, saida=saida, retorno=retorno, passageiros=passageiros,
+            categoria=alvo, id=ignorar_id,
+        )
+        periodo_ok = True
+        try:
+            self._periodo.validar(tentativa)
+        except ReservaInvalida as exc:
+            resultado.erros.append(exc)
+            periodo_ok = tentativa.retorno > tentativa.saida  # data passada ainda mostra a agenda
+
+        for veiculo in self._veiculos.listar():
+            if not veiculo.ativo:
+                resultado.veiculos.append(Situacao(veiculo, False, "Inativo"))
+            elif passageiros > veiculo.capacidade:
+                resultado.veiculos.append(Situacao(veiculo, False, f"Só {veiculo.capacidade} lugares"))
+            elif not periodo_ok:
+                resultado.veiculos.append(Situacao(veiculo, False, "Ajuste o horário"))
+            else:
+                existentes = self._reservas.listar_do_veiculo_na_data(veiculo.codigo, data)
+                choque = self._conflito.localizar(replace(tentativa, veiculo=veiculo), existentes)
+                if choque:
+                    resultado.veiculos.append(Situacao(veiculo, False, f"Ocupado {_faixa(choque)}", choque))
+                else:
+                    resultado.veiculos.append(Situacao(veiculo, True, "Livre"))
+
+        # Veículo que o servidor usaria: o escolhido, ou o primeiro livre da categoria.
+        if codigo_veiculo:
+            escolhido = next((s for s in resultado.veiculos if s.item.codigo == codigo_veiculo), None)
+            resultado.veiculo = escolhido.item if escolhido and escolhido.livre else None
+        elif alvo and periodo_ok:
+            resultado.veiculo = next(
+                (s.item for s in resultado.veiculos if s.livre and s.item.categoria is alvo), None
+            )
+        # Mesma ordem do _preparar: capacidade antes de procurar veículo livre.
+        escolhido_pedido = next((s.item for s in resultado.veiculos if s.item.codigo == codigo_veiculo), None)
+        capacidade_ok = True
+        if alvo or escolhido_pedido:
+            try:
+                self._capacidade.validar(replace(tentativa, veiculo=escolhido_pedido))
+            except ReservaInvalida as exc:
+                capacidade_ok = False
+                if exc not in resultado.erros and not any(
+                    type(e) is type(exc) for e in resultado.erros
+                ):
+                    resultado.erros.append(exc)
+        if resultado.veiculo is None and alvo and periodo_ok and capacidade_ok and not codigo_veiculo:
+            resultado.erros.append(SemVeiculoDisponivel(alvo, data, saida, retorno))
+
+        # Motorista que seria escalado.
+        if self._motoristas is not None:
+            resultado.motoristas_cadastrados = len(self._motoristas.listar())
+        if resultado.veiculo is not None and periodo_ok and resultado.motoristas_cadastrados:
+            tentativa = replace(tentativa, veiculo=resultado.veiculo)
+            preferido = self._reservas.obter(ignorar_id).motorista if ignorar_id else None
+            resultado.motoristas = [sit for sit, _ in self._situacao_dos_motoristas(tentativa)]
+            try:
+                resultado.motorista = self._escalar(tentativa, preferido)
+            except ReservaInvalida as exc:
+                resultado.erros.append(exc)
+        return resultado

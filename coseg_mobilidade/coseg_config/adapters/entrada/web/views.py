@@ -25,8 +25,12 @@ from core.domain.excecoes import (
 
 from .composicao import montar_cadastro, montar_service
 from .serializacao import (
+    ler_categoria,
     ler_data,
+    ler_hora,
+    ler_inteiro,
     motorista_para_dict,
+    situacao_para_dict,
     reserva_do_payload,
     reserva_para_dict,
     veiculo_para_dict,
@@ -112,6 +116,62 @@ def _sucesso(mensagem, reserva, status=200):
 def veiculos(request):
     frota = [veiculo_para_dict(v) for v in montar_service().frota()]
     return JsonResponse({"sucesso": True, "total": len(frota), "veiculos": frota})
+
+
+def _codigo_do_erro(exc):
+    for tipo, status, codigo in ERROS_DE_DOMINIO:
+        if isinstance(exc, tipo):
+            return status, codigo
+    return 400, "RESERVA_INVALIDA"
+
+
+@api
+@require_GET
+def disponibilidade(request):
+    """Simula o pedido sem gravar: o formulário mostra a resposta do servidor em vez
+    de repetir as regras de conflito, capacidade e escala no JavaScript."""
+    q = request.GET
+    obrigatorios = [c for c in ("data", "saida", "retorno") if not q.get(c)]
+    if obrigatorios:
+        raise CamposObrigatorios(obrigatorios)
+    resultado = montar_service().simular(
+        data=ler_data(q.get("data")),
+        saida=ler_hora(q.get("saida"), "saida"),
+        retorno=ler_hora(q.get("retorno"), "retorno"),
+        passageiros=max(1, ler_inteiro(q.get("passageiros") or 1, "passageiros")),
+        codigo_veiculo=q.get("veiculo") or None,
+        categoria=ler_categoria(q.get("categoria")),
+        ignorar_id=ler_inteiro(q.get("ignorar"), "ignorar"),
+    )
+    erros = []
+    for exc in resultado.erros:
+        status, codigo = _codigo_do_erro(exc)
+        erros.append({"codigo": codigo, "status": status, "campo": exc.campo, "erro": exc.mensagem})
+    escalado = resultado.motorista
+    return JsonResponse({
+        "sucesso": True,
+        "categoria_minima": resultado.categoria_minima.value if resultado.categoria_minima else None,
+        "erros": erros,
+        "veiculos": [
+            situacao_para_dict(s, "codigo", {"categoria": s.item.categoria.value, "capacidade": s.item.capacidade})
+            for s in resultado.veiculos
+        ],
+        "veiculo": resultado.veiculo.codigo if resultado.veiculo else None,
+        "motoristas_cadastrados": resultado.motoristas_cadastrados,
+        "motoristas": [
+            situacao_para_dict(s, "matricula", {
+                "nome": s.item.nome,
+                "cnh_categoria": s.item.categoria_cnh.value,
+                "escalado": bool(escalado and escalado.matricula == s.item.matricula),
+            })
+            for s in resultado.motoristas
+        ],
+        "motorista": (
+            {"matricula": escalado.matricula, "nome": escalado.nome,
+             "cnh_categoria": escalado.categoria_cnh.value}
+            if escalado else None
+        ),
+    })
 
 
 @api

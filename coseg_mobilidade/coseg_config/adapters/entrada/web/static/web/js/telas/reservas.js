@@ -41,7 +41,7 @@ export async function render(main, rota) {
         </div>
       </div>
 
-      <div id="lista" class="secao" style="gap:28px"></div>
+      <div id="lista" class="lista-dias"></div>
     </section>`.texto;
 
   const lista = main.querySelector("#lista");
@@ -98,7 +98,7 @@ export async function render(main, rota) {
               <span>${r.solicitante} · ${r.setor} · ${r.motorista_nome ? `motorista ${r.motorista_nome}` : "motorista a definir"}</span>
               <span>${r.origem} → ${r.destino} · ${r.passageiros} ${r.passageiros === 1 ? "pessoa" : "pessoas"}</span>
             </div>
-            <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <div class="reserva-pilulas">
               <span class="pilula pilula-pequena pilula-escura mono">${r.veiculo}</span>
               ${pilulaStatus(r.status)}
             </div>

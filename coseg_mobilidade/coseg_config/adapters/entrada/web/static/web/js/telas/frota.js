@@ -63,7 +63,7 @@ function telaVeiculos(veiculos, ativas) {
           const coletivo = v.categoria === "VC";
           return html`
             <article class="card veiculo ${coletivo && v.ativo ? "card-verde" : ""} ${v.ativo ? "" : "inativo"}">
-              <div style="display:flex;justify-content:space-between;gap:8px;align-items:center">
+              <div class="card-topo-pilulas">
                 <span class="pilula pilula-pequena ${coletivo ? "pilula-menta" : "pilula-escura"}">${NOME_CATEGORIA[v.categoria]} · ${v.categoria}</span>
                 <span class="pilula pilula-pequena ${v.ativo ? "pilula-contorno" : "pilula-cinza"}">${v.ativo ? "Ativo" : "Inativo"}</span>
               </div>
@@ -118,13 +118,13 @@ function telaMotoristas(motoristas, ativas, hoje) {
           const disponivel = m.ativo && cnh.ok;
           return html`
             <article class="card veiculo ${dirigeColetivo && disponivel ? "card-verde" : ""} ${disponivel ? "" : "inativo"}">
-              <div style="display:flex;justify-content:space-between;gap:8px;align-items:center">
+              <div class="card-topo-pilulas">
                 <span class="pilula pilula-pequena ${dirigeColetivo ? "pilula-menta" : "pilula-escura"}">CNH ${m.cnh_categoria} · dirige ${m.dirige.join(" e ")}</span>
                 <span class="pilula pilula-pequena ${m.ativo ? "pilula-contorno" : "pilula-cinza"}">${m.ativo ? "Ativo" : "Inativo"}</span>
               </div>
               <div>
                 <p class="motorista-nome">${m.nome}</p>
-                <p class="mono" style="font-size:14px;margin-top:4px">${m.matricula}</p>
+                <p class="mono motorista-matricula">${m.matricula}</p>
               </div>
               <dl class="veiculo-dados">
                 <div><dt>Telefone</dt><dd>${m.telefone || "—"}</dd></div>

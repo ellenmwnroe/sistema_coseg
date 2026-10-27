@@ -87,7 +87,8 @@ else:
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
-            "NAME": Path("/tmp/coseg.sqlite3") if NA_VERCEL else BASE_DIR / "db.sqlite3",
+            "NAME": os.environ.get("COSEG_SQLITE")
+            or (Path("/tmp/coseg.sqlite3") if NA_VERCEL else BASE_DIR / "db.sqlite3"),
             # BEGIN IMMEDIATE: o atomic() já pega o lock de escrita, então a
             # checagem de conflito e o INSERT não intercalam entre requisições.
             "OPTIONS": {"transaction_mode": "IMMEDIATE"},

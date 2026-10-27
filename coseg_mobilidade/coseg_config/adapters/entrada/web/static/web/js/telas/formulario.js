@@ -1,24 +1,23 @@
 // Nova reserva / editar reserva.
-// O painel escuro à direita mostra, enquanto a pessoa digita, quais veículos
-// estão livres no horário, qual categoria o grupo exige e o que o servidor deve
-// responder. Quem decide de verdade continua sendo o servidor: os erros que ele
-// devolve aparecem no campo certo (usando o "campo" do JSON de erro).
+//
+// As regras críticas (capacidade, datas, conflito de horário, escala de motorista)
+// ficam SÓ no servidor. Enquanto a pessoa preenche, a tela pergunta ao servidor
+// (GET /api/disponibilidade/) o que aconteceria com o pedido e apenas mostra a
+// resposta. Ao enviar, a tela só muda depois da resposta do POST/PUT; os erros
+// voltam no JSON com o "campo" e aparecem no lugar certo.
 import { api } from "../api.js";
 import { aviso, icone } from "../ui.js";
-import {
-  CAPACIDADE, NOME_CATEGORIA, categoriaMinima, conflita, dataExtenso, duracao,
-  escalarMotorista, hojeISO, html, minutos, situacaoMotorista,
-} from "../util.js";
+import { NOME_CATEGORIA, dataExtenso, duracao, hojeISO, html } from "../util.js";
 
 const CAMPOS = ["solicitante", "setor", "atividade", "origem", "destino", "data", "saida", "retorno", "passageiros", "observacoes"];
+const OBRIGATORIOS = ["solicitante", "setor", "atividade", "origem", "destino", "data", "saida", "retorno"];
 // Nome do campo no JSON de erro da API -> campo da tela.
 const CAMPO_DA_TELA = { categoria: "veiculo", "veiculo ou categoria": "veiculo", status: "geral" };
 
 export async function render(main, rota) {
   const editando = rota.nome === "editar";
-  const [veiculos, motoristas, cadastro, original] = await Promise.all([
+  const [veiculos, cadastro, original] = await Promise.all([
     api.veiculos(),
-    api.motoristas().catch(() => []),
     api.colaboradores().catch(() => ({ colaboradores: [], setores: [] })),
     editando ? api.reserva(rota.id) : null,
   ]);
@@ -28,7 +27,7 @@ export async function render(main, rota) {
       <section class="tela"><div class="card vazio-grande">
         <strong>Esta reserva está ${original.status === "CANCELADA" ? "cancelada" : "concluída"}</strong>
         <p>Só reservas confirmadas podem ser alteradas.</p>
-        <p style="margin-top:18px"><a class="botao botao-escuro" href="#/reservas">Voltar para reservas</a></p>
+        <p class="acoes-vazio"><a class="botao botao-escuro" href="#/reservas">Voltar para reservas</a></p>
       </div></section>`.texto;
     return null;
   }
@@ -39,7 +38,7 @@ export async function render(main, rota) {
     data: p.get("data") || hojeISO(), saida: p.get("saida") || "08:00", retorno: p.get("retorno") || "10:00",
     passageiros: 1, observacoes: "", veiculo: p.get("veiculo") || "",
   };
-  const cache = new Map(); // data -> reservas daquele dia
+  const capacidadeDe = Object.fromEntries(veiculos.map((v) => [v.categoria, v.capacidade]));
 
   main.innerHTML = html`
     <section class="tela">
@@ -49,44 +48,44 @@ export async function render(main, rota) {
           <h1 class="titulo">${editando ? "Editar reserva" : "Pedir um veículo"}</h1>
           <p class="subtitulo">${editando
             ? "Altere o que precisar. O servidor confere tudo de novo antes de salvar."
-            : "Preencha os dados e veja ao lado, na hora, quais veículos estão livres."}</p>
+            : "Preencha os dados e veja ao lado, consultado no servidor, o que está livre."}</p>
         </div>
       </div>
 
       <form class="form-layout" id="form" novalidate>
-        <div class="secao" style="gap:20px">
+        <div class="coluna-form">
           <div class="alerta alerta-erro" id="erro-geral" role="alert" hidden></div>
 
-          <div class="card secao">
-            <div class="secao-cabeca"><span class="secao-num">01</span><h2 class="secao-titulo">Quem está pedindo</h2></div>
+          <fieldset class="card secao">
+            <legend class="secao-cabeca"><span class="secao-num">01</span><span class="secao-titulo">Quem está pedindo</span></legend>
             <div class="campos">
-              ${campo("solicitante", "Nome do solicitante", inicial.solicitante, { list: "lista-colaboradores", autocomplete: "name" })}
-              ${campo("setor", "Setor", inicial.setor, { list: "lista-setores" })}
+              ${campo("solicitante", "Nome do solicitante", inicial.solicitante, { list: "lista-colaboradores", autocomplete: "name", required: true })}
+              ${campo("setor", "Setor", inicial.setor, { list: "lista-setores", required: true })}
             </div>
             <datalist id="lista-colaboradores">${cadastro.colaboradores.map((c) => html`<option value="${c.nome}">${c.setor}</option>`)}</datalist>
             <datalist id="lista-setores">${cadastro.setores.map((s) => html`<option value="${s}"></option>`)}</datalist>
-          </div>
+          </fieldset>
 
-          <div class="card secao">
-            <div class="secao-cabeca"><span class="secao-num">02</span><h2 class="secao-titulo">Para quê e para onde</h2></div>
+          <fieldset class="card secao">
+            <legend class="secao-cabeca"><span class="secao-num">02</span><span class="secao-titulo">Para quê e para onde</span></legend>
             <div class="campos">
-              ${campo("atividade", "Atividade", inicial.atividade, { cheio: true, placeholder: "Ex.: inspeção técnica no berço 101" })}
-              ${campo("origem", "Origem", inicial.origem)}
-              ${campo("destino", "Destino", inicial.destino)}
+              ${campo("atividade", "Atividade", inicial.atividade, { cheio: true, required: true, placeholder: "Ex.: inspeção técnica no berço 101" })}
+              ${campo("origem", "Origem", inicial.origem, { required: true })}
+              ${campo("destino", "Destino", inicial.destino, { required: true })}
             </div>
-          </div>
+          </fieldset>
 
-          <div class="card secao">
-            <div class="secao-cabeca"><span class="secao-num">03</span><h2 class="secao-titulo">Quando</h2></div>
+          <fieldset class="card secao">
+            <legend class="secao-cabeca"><span class="secao-num">03</span><span class="secao-titulo">Quando</span></legend>
             <div class="campos campos-3">
-              ${campo("data", "Data", inicial.data, { type: "date" })}
-              ${campo("saida", "Saída", inicial.saida, { type: "time", step: 300 })}
-              ${campo("retorno", "Retorno previsto", inicial.retorno, { type: "time", step: 300 })}
+              ${campo("data", "Data", inicial.data, { type: "date", required: true })}
+              ${campo("saida", "Saída", inicial.saida, { type: "time", step: 300, required: true })}
+              ${campo("retorno", "Retorno previsto", inicial.retorno, { type: "time", step: 300, required: true })}
             </div>
-          </div>
+          </fieldset>
 
-          <div class="card secao">
-            <div class="secao-cabeca"><span class="secao-num">04</span><h2 class="secao-titulo">Quantas pessoas</h2></div>
+          <fieldset class="card secao">
+            <legend class="secao-cabeca"><span class="secao-num">04</span><span class="secao-titulo">Quantas pessoas</span></legend>
             <div class="campo" id="campo-passageiros">
               <div class="contador">
                 <button type="button" data-passageiros="-1" aria-label="Menos um passageiro">−</button>
@@ -97,22 +96,22 @@ export async function render(main, rota) {
               </div>
               <p class="msg-erro" id="erro-passageiros"></p>
             </div>
-          </div>
+          </fieldset>
 
-          <div class="card secao">
-            <div class="secao-cabeca"><span class="secao-num">05</span><h2 class="secao-titulo">Veículo e motorista</h2></div>
-            <fieldset class="campo" id="campo-veiculo" style="border:0;padding:0;margin:0">
-              <legend class="rotulo" style="margin-bottom:8px">Veículo</legend>
+          <fieldset class="card secao">
+            <legend class="secao-cabeca"><span class="secao-num">05</span><span class="secao-titulo">Veículo e motorista</span></legend>
+            <div class="campo" id="campo-veiculo" role="radiogroup" aria-labelledby="rotulo-veiculo">
+              <span class="rotulo" id="rotulo-veiculo">Veículo ou categoria pretendida</span>
               <div class="escolhas" id="escolhas"></div>
               <p class="msg-erro" id="erro-veiculo"></p>
-            </fieldset>
+            </div>
             <div class="campo" id="campo-motorista">
               <span class="rotulo">Motorista · escalado pelo sistema</span>
               <div class="escala" id="escala" aria-live="polite"></div>
               <p class="msg-erro" id="erro-motorista"></p>
             </div>
             ${campo("observacoes", "Observações (opcional)", inicial.observacoes, { textarea: true, placeholder: "Ex.: levar EPI, motorista precisa de crachá" })}
-          </div>
+          </fieldset>
         </div>
 
         <aside class="card card-escuro resumo" aria-label="Resumo da reserva">
@@ -141,7 +140,8 @@ export async function render(main, rota) {
             <span class="resumo-valor" id="r-motorista"></span>
             <span class="resumo-nota" id="r-motorista-nota"></span>
           </div>
-          <div id="r-alertas" class="secao" style="gap:10px"></div>
+          <div id="r-alertas" class="alertas" aria-live="polite"></div>
+          <p class="resumo-fonte" id="r-fonte">${icone.info} Consultando o servidor…</p>
           <button class="botao botao-menta botao-grande" type="submit" id="enviar">
             ${icone.check} ${editando ? "Salvar alterações" : "Confirmar reserva"}
           </button>
@@ -153,144 +153,142 @@ export async function render(main, rota) {
   const form = main.querySelector("#form");
   const $ = (id) => form.querySelector(`#${id}`);
   const valor = (nome) => (form.elements[nome]?.value ?? "").trim();
-  let escolhido = inicial.veiculo || "";
-  // Na edição, o servidor mantém o motorista atual se ele ainda puder.
-  const preferido = original?.motorista || null;
+  const passageiros = () => Number($("passageiros").value) || 1;
 
-  // ---------------------------------------------------------- leitura ---
-  const passageiros = () => Number($("passageiros").value) || 0;
+  // Escolha atual: automática (categoria mínima), uma categoria ou um veículo.
+  let escolha = inicial.veiculo ? { tipo: "veiculo", valor: inicial.veiculo } : { tipo: "auto" };
+  let ultima = null;        // última resposta do servidor
+  let consulta = 0;         // descarta respostas antigas que cheguem fora de ordem
+  let espera = null;
 
-  async function reservasDoDia(data) {
-    if (!data) return [];
-    if (!cache.has(data)) {
-      cache.set(data, api.reservas(data).catch(() => []));
-    }
-    return cache.get(data);
+  // ------------------------------------------- consulta ao servidor ---
+  function agendarConsulta() {
+    clearTimeout(espera);
+    $("r-fonte").innerHTML = html`<span class="spinner spinner-pequeno" aria-hidden="true"></span> Consultando o servidor…`.texto;
+    espera = setTimeout(consultar, 220);
   }
 
-  // Situação de cada veículo para o horário que está na tela.
-  async function situacoes() {
-    const data = valor("data");
-    const saida = valor("saida");
-    const retorno = valor("retorno");
-    const periodoOk = data && saida && retorno && minutos(retorno) > minutos(saida);
-    const doDia = await reservasDoDia(data);
-    const pessoas = passageiros();
-    return veiculos.map((v) => {
-      if (!v.ativo) return { v, livre: false, motivo: "Inativo" };
-      if (pessoas > v.capacidade) return { v, livre: false, motivo: `Só ${v.capacidade} lugares` };
-      if (!periodoOk) return { v, livre: true, motivo: "Defina o horário" };
-      const choque = doDia.find((r) => r.id !== original?.id
-        && conflita({ veiculo: v.codigo, data, saida, retorno, status: "CONFIRMADA" }, r));
-      if (choque) return { v, livre: false, ocupado: true, motivo: `Ocupado ${choque.saida}–${choque.retorno}`, choque };
-      return { v, livre: true, motivo: "Livre" };
-    });
+  async function consultar() {
+    const numero = ++consulta;
+    const params = {
+      data: valor("data"), saida: valor("saida"), retorno: valor("retorno"), passageiros: passageiros(),
+      ...(escolha.tipo === "veiculo" ? { veiculo: escolha.valor } : {}),
+      ...(escolha.tipo === "categoria" ? { categoria: escolha.valor } : {}),
+      ...(editando ? { ignorar: original.id } : {}),
+    };
+    if (!params.data || !params.saida || !params.retorno) {
+      desenhar(null, "Preencha data, saída e retorno para ver a disponibilidade.");
+      return;
+    }
+    try {
+      const resposta = await api.disponibilidade(params);
+      if (numero === consulta) desenhar(resposta);
+    } catch (erro) {
+      if (numero === consulta) desenhar(null, erro.message);
+    }
   }
 
   // --------------------------------------------------------- desenho ---
-  async function atualizar() {
+  function desenhar(r, problema) {
+    ultima = r;
     const data = valor("data");
     const saida = valor("saida");
     const retorno = valor("retorno");
     const pessoas = passageiros();
-    const categoria = categoriaMinima(pessoas);
-    const lista = await situacoes();
+    const minima = r?.categoria_minima;
 
-    // Passageiros
     $("passageiros-saida").textContent = pessoas;
-    $("passageiros-nota").textContent = categoria
-      ? `cabe em veículo ${NOME_CATEGORIA[categoria].toLowerCase()} (${categoria}, até ${CAPACIDADE[categoria]})`
-      : "acima de 18 — a frota não atende";
+    $("passageiros-nota").textContent = !r ? "" : minima
+      ? `cabe em veículo ${NOME_CATEGORIA[minima].toLowerCase()} (${minima}, até ${capacidadeDe[minima]})`
+      : "nenhum veículo da frota leva esse grupo";
 
-    // Escolhas de veículo (automático + cada veículo)
-    const automaticoPossivel = Boolean(categoria);
-    const escolhidoAtual = lista.find((s) => s.v.codigo === escolhido);
+    // Se o veículo escolhido deixou de servir, volta para a escolha automática.
     let avisoTroca = "";
-    if (escolhido && escolhidoAtual && !escolhidoAtual.livre) {
-      avisoTroca = `${escolhido} não serve para esse pedido (${escolhidoAtual.motivo.toLowerCase()}). Voltei para a escolha automática.`;
-      escolhido = "";
+    const situacoes = r?.veiculos || [];
+    const atual = situacoes.find((s) => escolha.tipo === "veiculo" && s.codigo === escolha.valor);
+    if (atual && !atual.livre) {
+      avisoTroca = `${atual.codigo} não serve para esse pedido (${atual.motivo.toLowerCase()}). Voltei para a escolha automática.`;
+      escolha = { tipo: "auto" };
+      agendarConsulta();
     }
-    const primeiroLivre = lista.find((s) => s.livre && s.v.categoria === categoria);
+    const marcado = (tipo, v = "") => (escolha.tipo === tipo && (escolha.valor || "") === v ? "checked" : "");
     $("escolhas").innerHTML = html`
       <div class="escolha escolha-auto">
-        <input type="radio" name="veiculo" id="v-auto" value="" ${escolhido ? "" : "checked"} ${automaticoPossivel ? "" : "disabled"}>
-        <label for="v-auto"><strong>Automático</strong><small>${categoria ? `primeiro ${categoria} livre` : "indisponível"}</small></label>
+        <input type="radio" name="veiculo" id="v-auto" value="auto" ${marcado("auto")}>
+        <label for="v-auto"><strong>Automático</strong><small>${minima ? `qualquer ${minima} livre` : "conforme o grupo"}</small></label>
       </div>
-      ${lista.map((s) => html`
+      ${["VL", "VC"].map((c) => html`
+        <div class="escolha escolha-auto">
+          <input type="radio" name="veiculo" id="v-cat-${c}" value="categoria:${c}" ${marcado("categoria", c)}
+                 ${minima === "VC" && c === "VL" ? "disabled" : ""}>
+          <label for="v-cat-${c}"><strong>Qualquer ${c}</strong><small>${NOME_CATEGORIA[c].toLowerCase()} · até ${capacidadeDe[c]}</small></label>
+        </div>`)}
+      ${(situacoes.length ? situacoes : veiculos.map((v) => ({ codigo: v.codigo, categoria: v.categoria, livre: true, motivo: "" })))
+        .map((s) => html`
         <div class="escolha">
-          <input type="radio" name="veiculo" id="v-${s.v.codigo}" value="${s.v.codigo}"
-                 ${escolhido === s.v.codigo ? "checked" : ""} ${s.livre ? "" : "disabled"}>
-          <label for="v-${s.v.codigo}"><strong>${s.v.codigo}</strong><small>${s.v.categoria} · ${s.motivo}</small></label>
+          <input type="radio" name="veiculo" id="v-${s.codigo}" value="veiculo:${s.codigo}"
+                 ${marcado("veiculo", s.codigo)} ${s.livre ? "" : "disabled"}>
+          <label for="v-${s.codigo}"><strong>${s.codigo}</strong><small>${s.categoria}${s.motivo ? ` · ${s.motivo}` : ""}</small></label>
         </div>`)}`.texto;
 
-    // Resumo
+    // Motorista que o servidor escalaria.
+    const exigida = r?.veiculo && situacoes.find((s) => s.codigo === r.veiculo)?.categoria === "VC" ? "D ou E" : "B ou superior";
+    $("escala").innerHTML = (!r ? html`<p class="contador-nota">${problema || ""}</p>`
+      : !r.motoristas_cadastrados ? html`<p class="contador-nota">Nenhum motorista cadastrado: a reserva segue sem escala.</p>`
+      : !r.veiculo ? html`<p class="contador-nota">Defina um veículo disponível para ver quem será escalado.</p>`
+      : html`
+      <div class="escala-escolhido ${r.motorista ? "" : "vazio"}">
+        ${r.motorista ? html`
+          <span class="escala-avatar" aria-hidden="true">${r.motorista.nome.split(" ").map((x) => x[0]).slice(0, 2).join("")}</span>
+          <span><strong>${r.motorista.nome}</strong>
+            <small>CNH ${r.motorista.cnh_categoria} · ${r.motorista.matricula === original?.motorista ? "continua na reserva" : "escalado pelo servidor"}</small></span>` : html`
+          <span><strong>Ninguém disponível</strong><small>Nenhum motorista com CNH ${exigida} livre nesse horário.</small></span>`}
+      </div>
+      <p class="contador-nota">Critério do servidor: CNH ${exigida} válida e livre no horário; entre esses, a CNH mais básica que serve (para poupar quem dirige o coletivo) e quem rodou menos no dia.</p>
+      <ul class="escala-lista">
+        ${r.motoristas.map((m) => html`
+          <li class="${m.livre ? "livre" : ""} ${m.escalado ? "escolhido" : ""}">
+            <span class="nome-pessoa">${m.nome}</span>
+            <span class="mono">CNH ${m.cnh_categoria}</span>
+            <span>${m.escalado ? "Será escalado(a)" : m.motivo}</span>
+          </li>`)}
+      </ul>`).texto;
+
+    // Resumo (o que vem do servidor está marcado como tal).
     $("r-data").textContent = data ? dataExtenso(data) : "Escolha a data";
     $("r-horario").textContent = saida && retorno ? `${saida} → ${retorno}` : "";
     $("r-duracao").textContent = saida && retorno && duracao(saida, retorno) ? `${duracao(saida, retorno)} de uso` : "";
     $("r-grupo").textContent = `${pessoas} ${pessoas === 1 ? "pessoa" : "pessoas"}`;
-    $("r-grupo-nota").textContent = categoria
-      ? `Categoria mínima: ${categoria} (${NOME_CATEGORIA[categoria].toLowerCase()}, até ${CAPACIDADE[categoria]} lugares)`
-      : "Nenhum veículo da frota leva mais de 18 pessoas";
+    $("r-grupo-nota").textContent = !r ? "" : minima
+      ? `Categoria mínima: ${minima} (${NOME_CATEGORIA[minima].toLowerCase()}, até ${capacidadeDe[minima]} lugares)`
+      : "Nenhum veículo da frota leva esse grupo";
 
-    const relevantes = lista.filter((s) => s.v.ativo && (!categoria || s.v.categoria === categoria));
-    const livres = relevantes.filter((s) => s.livre);
-    $("r-livres").textContent = categoria
-      ? `${livres.length} de ${relevantes.length} veículos ${categoria} livres`
-      : "";
+    const alvo = escolha.tipo === "categoria" ? escolha.valor : minima;
+    const relevantes = situacoes.filter((s) => !alvo || s.categoria === alvo);
+    $("r-livres").textContent = r && alvo ? `${relevantes.filter((s) => s.livre).length} de ${relevantes.length} veículos ${alvo} livres` : "";
     $("r-chips").innerHTML = html`${relevantes.map((s) => html`
-      <span class="chip ${s.livre ? "livre" : "ocupado"}" title="${s.motivo}">${s.v.codigo}</span>`)}`.texto;
+      <span class="chip ${s.livre ? "livre" : "ocupado"}" title="${s.motivo}">${s.codigo}</span>`)}`.texto;
 
-    $("r-veiculo").textContent = escolhido
-      ? escolhido
-      : primeiroLivre ? `Automático → ${primeiroLivre.v.codigo}` : "Nenhum disponível";
+    $("r-veiculo").textContent = !r ? "—" : r.veiculo
+      ? (escolha.tipo === "veiculo" ? r.veiculo : `Automático → ${r.veiculo}`)
+      : "Nenhum disponível";
+    $("r-motorista").textContent = !r ? "—"
+      : !r.motoristas_cadastrados ? "Sem escala"
+      : !r.veiculo ? "Depende do veículo"
+      : r.motorista ? `Automático → ${r.motorista.nome}` : "Ninguém disponível";
+    $("r-motorista-nota").textContent = r?.motoristas?.length
+      ? `${r.motoristas.filter((m) => m.livre).length} motorista(s) com CNH ${exigida} livre(s) no horário` : "";
 
-    // Motoristas: a categoria vem do veículo escolhido (ou da escolha automática).
-    const categoriaDoVeiculo = escolhido
-      ? veiculos.find((v) => v.codigo === escolhido)?.categoria
-      : primeiroLivre?.v.categoria || categoria;
-    const doDia = await reservasDoDia(data);
-    const contexto = { categoria: categoriaDoVeiculo, data, saida, retorno, doDia, ignorarId: original?.id };
-    const escala = motoristas.length ? escalarMotorista(motoristas, { ...contexto, preferido }) : null;
-    const situMotoristas = motoristas.map((m) => ({ m, ...situacaoMotorista(m, contexto) }));
-    const habilitados = situMotoristas.filter((s) => s.livre).length;
-    const exigida = categoriaDoVeiculo === "VC" ? "D ou E" : "B ou superior";
-
-    $("escala").innerHTML = (!motoristas.length ? html`
-      <p class="contador-nota">Nenhum motorista cadastrado: a reserva segue sem escala.</p>` : html`
-      <div class="escala-escolhido ${escala ? "" : "vazio"}">
-        ${escala ? html`
-          <span class="escala-avatar" aria-hidden="true">${escala.m.nome.split(" ").map((p) => p[0]).slice(0, 2).join("")}</span>
-          <span>
-            <strong>${escala.m.nome}</strong>
-            <small>CNH ${escala.m.cnh_categoria} · ${escala.m.matricula === preferido ? "continua na reserva" : escala.carga ? `já rodou ${Math.round(escala.carga / 6) / 10} h no dia` : "livre o dia todo"}</small>
-          </span>` : html`
-          <span><strong>Ninguém disponível</strong><small>Nenhum motorista com CNH ${exigida} livre nesse horário.</small></span>`}
-      </div>
-      <p class="contador-nota">Critério: CNH ${exigida} válida e livre no horário. Entre esses, a CNH mais básica que serve (para poupar quem dirige o coletivo) e quem rodou menos no dia.</p>
-      <ul class="escala-lista">
-        ${situMotoristas.map((s) => html`
-          <li class="${s.livre ? "livre" : ""} ${escala && s.m.matricula === escala.m.matricula ? "escolhido" : ""}">
-            <span class="nome-pessoa">${s.m.nome}</span>
-            <span class="mono">CNH ${s.m.cnh_categoria}</span>
-            <span>${escala && s.m.matricula === escala.m.matricula ? "Será escalado(a)" : s.motivo}</span>
-          </li>`)}
-      </ul>`).texto;
-
-    $("r-motorista").textContent = !motoristas.length ? "Sem escala" : escala ? `Automático → ${escala.m.nome}` : "Ninguém disponível";
-    $("r-motorista-nota").textContent = motoristas.length
-      ? `${habilitados} motorista(s) com CNH ${exigida} livre(s) no horário`
-      : "";
-
-    // Alertas antecipados (o servidor confirma ao enviar)
+    // Avisos: os erros vêm do servidor (mesmas regras que ele aplica ao gravar).
     const alertas = [];
     if (avisoTroca) alertas.push(["aviso", avisoTroca]);
-    if (motoristas.length && !escala && categoria) alertas.push(["erro", `Nenhum motorista com CNH ${exigida} livre nesse horário. Tente outro horário.`]);
-    if (data && data < hojeISO()) alertas.push(["erro", "A data está no passado."]);
-    if (saida && retorno && minutos(retorno) <= minutos(saida)) alertas.push(["erro", "O retorno precisa ser depois da saída."]);
-    if (!categoria) alertas.push(["erro", "Grupos acima de 18 pessoas não podem ser atendidos pela frota."]);
-    else if (!escolhido && !primeiroLivre) alertas.push(["erro", `Nenhum veículo ${categoria} livre nesse horário. Tente outro horário.`]);
+    if (problema) alertas.push(["aviso", problema]);
+    for (const e of r?.erros || []) alertas.push(["erro", e.erro]);
     $("r-alertas").innerHTML = html`${alertas.map(([tipo, texto]) => html`
       <div class="alerta alerta-${tipo}">${icone.alerta}<span>${texto}</span></div>`)}`.texto;
+    $("r-fonte").innerHTML = r
+      ? html`${icone.check} Disponibilidade confirmada pelo servidor agora.`.texto
+      : html`${icone.info} Aguardando dados para consultar o servidor.`.texto;
   }
 
   // ----------------------------------------------------------- erros ---
@@ -320,15 +318,27 @@ export async function render(main, rota) {
   async function enviar(e) {
     e.preventDefault();
     limparErros();
+
+    // Validação de experiência: só avisa o que está vazio antes de gastar uma ida
+    // ao servidor. Ele valida tudo de novo (inclusive isto) ao receber.
+    const vazios = OBRIGATORIOS.filter((c) => !valor(c));
+    if (vazios.length) {
+      vazios.forEach((c) => marcarErro(c, "Preencha este campo."));
+      $(`campo-${vazios[0]}`).scrollIntoView({ behavior: "smooth", block: "center" });
+      form.elements[vazios[0]].focus({ preventScroll: true });
+      aviso(`Faltam ${vazios.length} campo(s) obrigatório(s).`, "erro");
+      return;
+    }
+
     const dados = Object.fromEntries(CAMPOS.map((c) => [c, valor(c)]));
     dados.passageiros = passageiros();
-    if (escolhido) dados.veiculo = escolhido;
-    else dados.categoria = categoriaMinima(dados.passageiros) || "VC";
+    if (escolha.tipo === "veiculo") dados.veiculo = escolha.valor;
+    else dados.categoria = escolha.tipo === "categoria" ? escolha.valor : ultima?.categoria_minima || "VC";
 
     const botao = $("enviar");
     botao.disabled = true;
     const textoBotao = botao.innerHTML;
-    botao.innerHTML = html`<span class="spinner" aria-hidden="true"></span> Conferindo com o servidor…`.texto;
+    botao.innerHTML = html`<span class="spinner" aria-hidden="true"></span> Enviando ao servidor…`.texto;
     try {
       const resposta = editando ? await api.atualizar(original.id, dados) : await api.criar(dados);
       const r = resposta.reserva;
@@ -339,17 +349,13 @@ export async function render(main, rota) {
       let primeiro;
       if (corpo.campos?.length) {
         corpo.campos.forEach((c) => {
-          const marcado = marcarErro(c, "Campo obrigatório.");
-          primeiro ??= marcado;
+          const marcadoErro = marcarErro(c, "Campo obrigatório.");
+          primeiro ??= marcadoErro;
         });
       } else {
         primeiro = marcarErro(corpo.campo || "geral", erro.message);
       }
-      if (erro.status === 409) {
-        // A agenda mudou (alguém reservou antes): recarrega a disponibilidade.
-        cache.delete(dados.data);
-        await atualizar();
-      }
+      if (erro.status === 409) agendarConsulta(); // a agenda mudou: pergunta de novo
       primeiro?.scrollIntoView({ behavior: "smooth", block: "center" });
       aviso(erro.message, "erro");
     } finally {
@@ -367,40 +373,43 @@ export async function render(main, rota) {
       const conhecido = cadastro.colaboradores.find((c) => c.nome.toLowerCase() === e.target.value.trim().toLowerCase());
       if (conhecido && !valor("setor")) form.elements.setor.value = conhecido.setor;
     }
-    if (["data", "saida", "retorno"].includes(e.target.name)) atualizar();
+    if (["data", "saida", "retorno"].includes(e.target.name)) agendarConsulta();
   });
   form.addEventListener("change", (e) => {
-    if (e.target.name === "veiculo") {
-      escolhido = e.target.value;
-      $("campo-veiculo").classList.remove("erro");
-      $("erro-veiculo").innerHTML = "";
-      atualizar();
-    }
+    if (e.target.name !== "veiculo") return;
+    const [tipo, v] = e.target.value.split(":");
+    escolha = tipo === "auto" ? { tipo: "auto" } : { tipo, valor: v };
+    $("campo-veiculo").classList.remove("erro");
+    $("erro-veiculo").innerHTML = "";
+    agendarConsulta();
   });
   form.addEventListener("click", (e) => {
     const passo = e.target.closest("[data-passageiros]")?.dataset.passageiros;
     if (!passo) return;
     const novo = Math.min(30, Math.max(1, passageiros() + Number(passo)));
     $("passageiros").value = novo;
+    $("passageiros-saida").textContent = novo;
     $("campo-passageiros").classList.remove("erro");
-    atualizar();
+    agendarConsulta();
   });
   form.addEventListener("submit", enviar);
 
-  await atualizar();
+  desenhar(null);
+  await consultar();
   if (!editando) form.elements.solicitante.focus({ preventScroll: true });
-  return null;
+  return () => clearTimeout(espera);
 }
 
 function campo(nome, rotulo, valor, opcoes = {}) {
-  const { type = "text", cheio = false, textarea = false, ...extra } = opcoes;
+  const { type = "text", cheio = false, textarea = false, required = false, ...extra } = opcoes;
   const atributos = Object.entries(extra).map(([k, v]) => html` ${k}="${v}"`);
+  const obrigatorio = required ? html` required aria-required="true"` : "";
   return html`
     <div class="campo ${cheio || textarea ? "campo-cheio" : ""}" id="campo-${nome}">
       <label for="${nome}">${rotulo}</label>
       ${textarea
         ? html`<textarea id="${nome}" name="${nome}"${atributos} aria-describedby="erro-${nome}">${valor}</textarea>`
-        : html`<input id="${nome}" name="${nome}" type="${type}" value="${valor}"${atributos} aria-describedby="erro-${nome}">`}
+        : html`<input id="${nome}" name="${nome}" type="${type}" value="${valor}"${atributos}${obrigatorio} aria-describedby="erro-${nome}">`}
       <p class="msg-erro" id="erro-${nome}"></p>
     </div>`;
 }

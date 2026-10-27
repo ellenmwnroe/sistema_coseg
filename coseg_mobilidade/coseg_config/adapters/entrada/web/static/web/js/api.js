@@ -35,6 +35,7 @@ export const api = {
   reservas: (data) => pedir("GET", `/api/reservas/${data ? `?data=${data}` : ""}`).then((c) => c.reservas),
   reserva: (id) => pedir("GET", `/api/reservas/${id}/`).then((c) => c.reserva),
   colaboradores: () => pedir("GET", "/api/colaboradores/"),
+  disponibilidade: (params) => pedir("GET", `/api/disponibilidade/?${new URLSearchParams(params)}`),
   criar: (dados) => pedir("POST", "/api/reservas/", dados),
   atualizar: (id, dados) => pedir("PUT", `/api/reservas/${id}/`, dados),
   cancelar: (id) => pedir("DELETE", `/api/reservas/${id}/`),

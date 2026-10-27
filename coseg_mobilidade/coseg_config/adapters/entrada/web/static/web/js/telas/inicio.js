@@ -30,8 +30,8 @@ export async function render(main) {
     <section class="tela">
       <div class="hero">
         <div>
-          <p class="sobrelinha" style="color:var(--menta)">COSEG Mobilidade · Porto do Itaqui</p>
-          <h1 style="margin-top:14px">${saudacao()},<br>COSEG.</h1>
+          <p class="sobrelinha sobrelinha-menta">COSEG Mobilidade · Porto do Itaqui</p>
+          <h1 class="hero-titulo">${saudacao()},<br>COSEG.</h1>
           <p>${dataExtenso(hoje)}. ${deHoje.length === 1 ? "1 reserva" : `${deHoje.length} reservas`} na agenda de hoje
             e ${livresAgora} de ${ativos.length} veículos livres agora.</p>
           <div class="hero-acoes">
@@ -85,7 +85,7 @@ export async function render(main) {
                     <span class="item-sub">${r.motorista_nome ? `${r.motorista_nome} ao volante` : r.solicitante} · ${r.destino}</span>
                     <span class="progresso" aria-label="${feito}% do horário reservado"><span style="width:${feito}%"></span></span>
                   </span>
-                  <span class="mono" style="font-size:14px">volta ${r.retorno}</span>
+                  <span class="mono item-volta">volta ${r.retorno}</span>
                 </button>`;
             }) : html`<p class="vazio">Nenhum veículo fora agora. A frota inteira está no pátio.</p>`}
           </div>

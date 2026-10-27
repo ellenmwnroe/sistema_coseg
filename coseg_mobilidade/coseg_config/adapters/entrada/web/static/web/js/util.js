@@ -93,73 +93,12 @@ export function duracao(saida, retorno) {
   return m ? `${h} h ${m} min` : `${h} h`;
 }
 
-// --------------------------------------------- regras (espelho do core) ---
-// O servidor é quem decide. Estas funções só antecipam o resultado na tela.
-export const CAPACIDADE = { VL: 4, VC: 18 };
+// ---------------------------------------------------- rótulos da frota ---
+// Só nomes para exibir. As regras (capacidade, conflito, escala) ficam no servidor:
+// a tela consulta /api/disponibilidade/ em vez de repeti-las aqui.
 export const NOME_CATEGORIA = { VL: "Leve", VC: "Coletivo" };
 export const STATUS = { CONFIRMADA: "Confirmada", CANCELADA: "Cancelada", CONCLUIDA: "Concluída" };
-
-export function categoriaMinima(passageiros) {
-  if (passageiros <= CAPACIDADE.VL) return "VL";
-  if (passageiros <= CAPACIDADE.VC) return "VC";
-  return null;
-}
-
-/** Mesma regra do Reserva.conflita_com: intervalos semiabertos, canceladas não ocupam. */
-export function conflita(a, b) {
-  if (a.status === "CANCELADA" || b.status === "CANCELADA") return false;
-  return a.veiculo === b.veiculo
-    && a.data === b.data
-    && minutos(a.saida) < minutos(b.retorno)
-    && minutos(b.saida) < minutos(a.retorno);
-}
-
-/** Mesmo motorista em dois horários que se cruzam (canceladas não contam). */
-export function conflitaMotorista(a, b) {
-  if (!a.motorista || !b.motorista || a.motorista !== b.motorista) return false;
-  if (a.status === "CANCELADA" || b.status === "CANCELADA") return false;
-  return a.data === b.data
-    && minutos(a.saida) < minutos(b.retorno)
-    && minutos(b.saida) < minutos(a.retorno);
-}
-
-/** Situação de um motorista para uma reserva (mesma ordem de regras do servidor). */
-export function situacaoMotorista(m, { categoria, data, saida, retorno, doDia, ignorarId }) {
-  if (!m.ativo) return { livre: false, motivo: "Inativo" };
-  if (categoria && !m.dirige.includes(categoria)) return { livre: false, motivo: `não dirige ${categoria}` };
-  if (data && m.cnh_validade < data) return { livre: false, motivo: "CNH vencida" };
-  if (data && saida && retorno && minutos(retorno) > minutos(saida)) {
-    const choque = (doDia || []).find((r) => r.id !== ignorarId
-      && conflitaMotorista({ motorista: m.matricula, data, saida, retorno, status: "CONFIRMADA" }, r));
-    if (choque) return { livre: false, motivo: `Escalado ${choque.saida}–${choque.retorno}`, choque };
-  }
-  return { livre: true, motivo: "Livre" };
-}
-
 export const primeiroNome = (nome) => (nome || "").split(" ")[0];
-
-const NIVEL_CNH = { B: 0, C: 1, D: 2, E: 3 };
-
-/** Antecipa quem o servidor vai escalar (mesmo critério do ordem_de_escala do core):
- *  1. quem já estava na reserva (edição); 2. a CNH mais básica que serve, poupando
- *  D/E para o coletivo; 3. quem rodou menos minutos no dia; 4. ordem alfabética. */
-export function escalarMotorista(motoristas, { categoria, data, saida, retorno, doDia, ignorarId, preferido }) {
-  const candidatos = motoristas
-    .map((m) => ({ m, ...situacaoMotorista(m, { categoria, data, saida, retorno, doDia, ignorarId }) }))
-    .filter((s) => s.livre)
-    .map((s) => ({
-      m: s.m,
-      carga: (doDia || [])
-        .filter((r) => r.motorista === s.m.matricula && r.id !== ignorarId && r.status !== "CANCELADA")
-        .reduce((total, r) => total + minutos(r.retorno) - minutos(r.saida), 0),
-    }));
-  candidatos.sort((a, b) =>
-    (a.m.matricula === preferido ? 0 : 1) - (b.m.matricula === preferido ? 0 : 1)
-    || NIVEL_CNH[a.m.cnh_categoria] - NIVEL_CNH[b.m.cnh_categoria]
-    || a.carga - b.carga
-    || a.m.nome.localeCompare(b.m.nome, "pt-BR"));
-  return candidatos[0] || null;
-}
 
 // ---------------------------------------------------------------- rota ---
 export function lerRota() {
